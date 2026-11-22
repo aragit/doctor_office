@@ -1,0 +1,11 @@
+Clinical Note 1 - Diabetes Follow-up:
+Patient presents for routine diabetes management. HbA1c 7.8% (goal <7%). Currently on Metformin 500mg BID. Reports occasional polyuria and fatigue. Blood pressure 148/92. BMI 31.2. Discussed medication intensification options including addition of GLP-1 agonist or SGLT2 inhibitor. Emphasized dietary modifications and regular exercise. Recommended home glucose monitoring 2-3 times daily. Follow-up in 3 months with repeat HbA1c.
+
+Clinical Note 2 - Hypertension Management:
+Patient with known hypertension, currently on Lisinopril 10mg daily. Today BP 150/94. Reports good medication adherence. No side effects reported. Discussed DASH diet and sodium restriction. Consider increasing Lisinopril to 20mg daily or adding thiazide diuretic. Recommended home BP monitoring twice daily. Follow-up in 4 weeks.
+
+Clinical Note 3 - Asthma Exacerbation:
+Patient presents with wheezing and shortness of breath for 2 days. Using albuterol inhaler 4-6 times daily with partial relief. Peak flow 65% of personal best. No fever. Lungs: bilateral expiratory wheezes. Started prednisone 40mg daily for 5 days. Continue fluticasone nasal spray daily. Increase albuterol to Q4-6H PRN. Asthma action plan reviewed. Return if symptoms worsen or peak flow <50%.
+
+Clinical Note 4 - Seasonal Allergic Rhinitis:
+Patient with known seasonal allergies. Reports sneezing, nasal congestion, itchy eyes for past 2 weeks. Currently using fluticasone nasal spray daily and loratadine 10mg daily. Symptoms partially controlled. Recommended continuing current regimen, adding saline nasal irrigation twice daily. Consider referral to allergist for immunotherapy if symptoms persist despite maximal medical therapy.
