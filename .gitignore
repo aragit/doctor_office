@@ -48,3 +48,9 @@ logs/
 tmp/
 temp/
 .cache/
+
+# --- added for Phase 0 (A10) ---
+.env
+.env.*
+models/*.gguf
+data/memory/
