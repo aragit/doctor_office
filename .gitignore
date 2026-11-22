@@ -1,7 +1,50 @@
+# Virtual environments
 venv/
+.venv/
+env/
+ENV/
+
+# Python
 __pycache__/
-*.pyc
-.env
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Models & large binaries (CRITICAL)
+models/
+*.gguf
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.onnx
+*.h5
+*.pb
+*.tflite
+*.ckpt
+*.weights
+
+# Data (if large)
+data/raw/
+data/processed/
+*.csv
+*.parquet
+*.feather
+
+# IDE & OS
+.idea/
+.vscode/
+*.swp
 .DS_Store
+Thumbs.db
+
+# Logs & temp
 *.log
-models/*.gguf
+logs/
+tmp/
+temp/
+.cache/
