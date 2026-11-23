@@ -338,6 +338,7 @@ def run_case(
         mode=mode,
         patient_id=PATIENT_ID,
         use_memory=use_memory,
+        is_synthetic=True,
     )
 
     soap = result["soap_note"]

@@ -54,3 +54,4 @@ temp/
 .env.*
 models/*.gguf
 data/memory/
+data/chroma_db/

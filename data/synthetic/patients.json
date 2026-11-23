@@ -8,7 +8,8 @@
     "conditions": ["Type 2 Diabetes", "Hypertension"],
     "medications": ["Metformin 500mg BID", "Lisinopril 10mg daily"],
     "allergies": ["Penicillin"],
-    "last_visit_summary": "Blood pressure 148/92. HbA1c 7.8%. Advised lifestyle changes and medication adherence."
+    "last_visit_summary": "Blood pressure 148/92. HbA1c 7.8%. Advised lifestyle changes and medication adherence.",
+    "is_synthetic": true
   },
   {
     "tenant_id": "clinic_a",
@@ -19,6 +20,7 @@
     "conditions": ["Asthma", "Seasonal Allergies"],
     "medications": ["Albuterol inhaler PRN", "Fluticasone nasal spray"],
     "allergies": [],
-    "last_visit_summary": "Mild asthma exacerbation last month. Peak flow improved after steroid burst."
+    "last_visit_summary": "Mild asthma exacerbation last month. Peak flow improved after steroid burst.",
+    "is_synthetic": true
   }
 ]

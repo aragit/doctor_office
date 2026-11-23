@@ -209,6 +209,8 @@ class AgentState(TypedDict, total=False):
     patient_id: Optional[str]
     use_memory: bool
     physician_feedback: Optional[str]
+    is_synthetic: bool
+    allow_real_phi: bool
 
     # --- Intermediate / final artifacts -------------------------------------
     soap_note: Dict[str, Any]
@@ -272,6 +274,8 @@ def build_initial_state(
     physician_feedback: Optional[str] = None,
     visit_context: Optional[Dict[str, Any]] = None,
     specialty: Optional[str] = None,
+    is_synthetic: bool = False,
+    allow_real_phi: bool = False,
 ) -> AgentState:
     """Create the initial state for a visit.
 
@@ -331,6 +335,8 @@ def build_initial_state(
         pending_revalidation=False,
         cycle_flag_resets=0,
         started_at=time.time() if started_at is None else started_at,
+        is_synthetic=is_synthetic,
+        allow_real_phi=allow_real_phi,
     )
 
 

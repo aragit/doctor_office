@@ -1,6 +1,7 @@
 """Central model configuration for the Doctor Office MVP."""
 
 import os
+from typing import Optional
 
 # Model presets - logical mode labels, not specific model files
 MODEL_PRESETS = {
@@ -21,6 +22,9 @@ QUALITY_MAX_TOKENS = int(os.environ.get("LLM_QUALITY_MAX_TOKENS", "384"))
 
 # RAG configuration
 RAG_TOP_K = int(os.environ.get("RAG_TOP_K", "2"))
+
+# Synthetic-data guard configuration
+ALLOW_REAL_PHI = os.environ.get("ALLOW_REAL_PHI", "false").lower() == "true"
 
 
 def get_model_name(mode: str = DEFAULT_MODE) -> str:
@@ -52,3 +56,11 @@ def get_max_tokens(mode: str = DEFAULT_MODE) -> int:
     if mode == "quality":
         return QUALITY_MAX_TOKENS
     return FAST_MAX_TOKENS
+
+
+# Re-export synthetic data utilities from the single source of truth
+from utils.synthetic import (  # noqa: F401
+    is_known_synthetic_patient,
+    enforce_synthetic_guard,
+    SyntheticGuardError,
+)

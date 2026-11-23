@@ -146,6 +146,7 @@ def _run_graph(always_bad: bool, validation_stub, chief_complaint: str = None):
             mode="fast",
             patient_id="P001",
             use_memory=False,
+            is_synthetic=True,
         )
         return final
     finally:

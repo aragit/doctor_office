@@ -62,7 +62,7 @@ from agents.supervisor_node import (
     supervisor_node,
 )
 from agents.validation_node import validation_node
-from utils.config import get_model_name
+from utils.config import get_model_name, enforce_synthetic_guard
 
 logger = logging.getLogger(__name__)
 
@@ -303,6 +303,8 @@ def run_visit_pipeline(
     physician_feedback: Optional[str] = None,
     visit_context: Optional[Dict[str, Any]] = None,
     specialty: Optional[str] = None,
+    is_synthetic: bool = False,
+    allow_real_phi: bool = False,
 ) -> Dict[str, Any]:
     """Execute the complete visit documentation pipeline via LangGraph.
 
@@ -326,10 +328,16 @@ def run_visit_pipeline(
         physician_feedback: Optional free-text feedback from a physician
             requesting changes to the generated note (for revision runs).
         specialty: Optional medical specialty ID for specialty-specific guidance.
+        is_synthetic: Whether the patient record is known synthetic data.
+            Defaults to False. When True, the synthetic-data guard is bypassed.
+        allow_real_phi: Whether to allow real PHI. Defaults to False.
+            Only set True in isolated dev environments with synthetic data you control.
 
     Returns:
         Dictionary with `soap_note`, `coding_result`, `quality_flags` and `metadata`.
     """
+    enforce_synthetic_guard(patient_id, is_synthetic)
+
     started_at = time.time()
     initial_state = build_initial_state(
         patient_context=patient_context,
@@ -343,6 +351,8 @@ def run_visit_pipeline(
         physician_feedback=physician_feedback,
         visit_context=visit_context,
         specialty=specialty,
+        is_synthetic=is_synthetic,
+        allow_real_phi=allow_real_phi,
     )
 
     logger.info("Starting LangGraph visit pipeline (mode=%s)", mode)
@@ -365,6 +375,8 @@ def stream_visit_pipeline(
     physician_feedback: Optional[str] = None,
     visit_context: Optional[Dict[str, Any]] = None,
     specialty: Optional[str] = None,
+    is_synthetic: bool = False,
+    allow_real_phi: bool = False,
 ) -> Iterator[Dict[str, Any]]:
     """Run the pipeline, yielding a legacy-shaped result after each node.
 
@@ -376,6 +388,8 @@ def stream_visit_pipeline(
     Yields:
         One dict per completed node with the same keys as `run_visit_pipeline`.
     """
+    enforce_synthetic_guard(patient_id, is_synthetic)
+
     started_at = time.time()
     initial_state = build_initial_state(
         patient_context=patient_context,
@@ -389,6 +403,8 @@ def stream_visit_pipeline(
         physician_feedback=physician_feedback,
         visit_context=visit_context,
         specialty=specialty,
+        is_synthetic=is_synthetic,
+        allow_real_phi=allow_real_phi,
     )
 
     for snapshot in get_graph().stream(initial_state, stream_mode="values"):
@@ -447,6 +463,8 @@ Last Visit: {patient['last_visit_summary']}
     print("\nGraph topology:\n")
     print(graph_mermaid())
     print()
+
+    enforce_synthetic_guard("P001", is_synthetic=True)
 
     result = run_visit_pipeline(
         patient_context=patient_context,

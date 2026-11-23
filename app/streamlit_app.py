@@ -203,6 +203,7 @@ def run_pipeline(
 ):
     """Blocking call into the LangGraph orchestrator (same signature as before)."""
     from agents.orchestrator import run_visit_pipeline
+    from utils.config import is_known_synthetic_patient
     return run_visit_pipeline(
         patient_context=patient_context,
         chief_complaint=chief_complaint,
@@ -211,6 +212,7 @@ def run_pipeline(
         patient_id=patient_id,
         use_memory=use_memory,
         visit_context=visit_context,
+        is_synthetic=is_known_synthetic_patient(patient_id),
     )
 
 
@@ -229,6 +231,7 @@ def run_pipeline_streaming(
     can show which agent is currently working.
     """
     from agents.orchestrator import stream_visit_pipeline
+    from utils.config import is_known_synthetic_patient
     yield from stream_visit_pipeline(
         patient_context=patient_context,
         chief_complaint=chief_complaint,
@@ -237,6 +240,7 @@ def run_pipeline_streaming(
         patient_id=patient_id,
         use_memory=use_memory,
         visit_context=visit_context,
+        is_synthetic=is_known_synthetic_patient(patient_id),
     )
 
 
@@ -1117,6 +1121,7 @@ def run_pipeline_with_feedback(
 ):
     """Run the pipeline with optional physician feedback for revision."""
     from agents.orchestrator import stream_visit_pipeline
+    from utils.config import is_known_synthetic_patient
     yield from stream_visit_pipeline(
         patient_context=patient_context,
         chief_complaint=chief_complaint,
@@ -1127,6 +1132,7 @@ def run_pipeline_with_feedback(
         physician_feedback=physician_feedback,
         visit_context=visit_context,
         specialty=specialty,
+        is_synthetic=is_known_synthetic_patient(patient_id),
     )
 
 
