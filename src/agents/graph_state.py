@@ -253,6 +253,7 @@ class AgentState(TypedDict, total=False):
     revalidation_stalls: int
     pending_revalidation: bool
     cycle_flag_resets: int
+    empty_soap_retries: int
 
     # --- Observability ------------------------------------------------------
     messages: Annotated[List[AnyMessage], add_messages]
@@ -334,6 +335,7 @@ def build_initial_state(
         revalidation_stalls=0,
         pending_revalidation=False,
         cycle_flag_resets=0,
+        empty_soap_retries=0,
         started_at=time.time() if started_at is None else started_at,
         is_synthetic=is_synthetic,
         allow_real_phi=allow_real_phi,

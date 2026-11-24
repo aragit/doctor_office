@@ -904,7 +904,9 @@ def test_compatibility():
     # P0 fixes and the deterministic CPT calculator are unchanged.
     check("P0: explicit model name still works",
           get_llm(model_name="gemma3:4b").model_name == "gemma3:4b")
-    check("P0: mode still works", get_llm(mode="quality").model_name == MODEL_PRESETS["quality"])
+    # Phase 0 / item 0.4 removed fake "quality" preset; mode="quality" falls back to "fast"
+    check("P0: mode='quality' falls back to fast",
+          get_llm(mode="quality").model_name == MODEL_PRESETS["fast"])
     from tools.em_calculator import calculate_em_code
 
     check("deterministic CPT unchanged",

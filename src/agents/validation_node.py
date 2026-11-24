@@ -49,6 +49,7 @@ def validation_node(state: AgentState) -> dict:
         patient_context=state["patient_context"],
         chief_complaint=state["chief_complaint"],
         extra_context=visit_context_to_grounding_text(state.get("visit_context")),
+        soap_note=soap_note,
     )
 
     quality_flags = list(validation_result.get("quality_flags", []))

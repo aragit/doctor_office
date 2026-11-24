@@ -52,6 +52,7 @@ from agents.graph_state import (
 from agents.supervisor_policy import (
     MAX_RETRIES,
     MAX_REVALIDATIONS,
+    MAX_EMPTY_SOAP_RETRIES,
     SupervisorDecision,
     SupervisorPolicy,
     VisitSupervisorPolicy,
@@ -115,6 +116,7 @@ def supervisor_node(state: AgentState) -> dict:
     pending_revalidation = bool(state.get("pending_revalidation", False))
     revalidation_passes = int(state.get("revalidation_passes", 0) or 0)
     revalidation_stalls = int(state.get("revalidation_stalls", 0) or 0)
+    empty_soap_retries = int(state.get("empty_soap_retries", 0) or 0)
 
     decision = policy.determine_route(
         flags,
@@ -124,6 +126,7 @@ def supervisor_node(state: AgentState) -> dict:
         pending_revalidation=pending_revalidation,
         revalidation_passes=revalidation_passes,
         revalidation_stalls=revalidation_stalls,
+        empty_soap_retries=empty_soap_retries,
     )
 
     route_to = decision.route_to
@@ -181,6 +184,9 @@ def supervisor_node(state: AgentState) -> dict:
         update["cleared_cycle_flags"] = list(flags)
         update["cycle_flag_resets"] = int(state.get("cycle_flag_resets", 0) or 0) + 1
         update["retry_count"] = update["retry_count"] + 1
+        # Track empty SOAP retries separately
+        if decision.class_ == "retry_scribe" and any("empty" in f.lower() for f in feedback):
+            update["empty_soap_retries"] = empty_soap_retries + 1
         update["messages"] = [AIMessage(
             content=(
                 f"Supervisor: retry #{update['retry_count']} (max {MAX_RETRIES}) -> "

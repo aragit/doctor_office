@@ -498,6 +498,40 @@ def test_spent_revalidation_budget_hands_the_gap_to_coding():
           supervisor_node(advisory))
 
 
+def test_supervisor_escalates_on_empty_soap():
+    """Empty SOAP note triggers retry, then human review on second occurrence."""
+    from agents.supervisor_policy import MAX_EMPTY_SOAP_RETRIES
+
+    empty_soap_flag = "soap_empty: All SOAP sections (subjective, objective, assessment, plan) are empty"
+    coding = {"primary_icd10": "E11.9", "secondary_icd10": ["I10"]}
+
+    # First occurrence: should retry scribe
+    first = build_initial_state("ctx", "cc", "notes")
+    first.update({
+        "quality_flags": [empty_soap_flag],
+        "cycle_flags": {"validation": [empty_soap_flag], "coding": [], "scribe": []},
+        "coding_result": coding,
+        "empty_soap_retries": 0,
+    })
+    update = supervisor_node(first)
+    assert update["route_to"] == ROUTE_RETRY_SCRIBE, f"Expected retry_scribe, got {update['route_to']}"
+    assert update.get("empty_soap_retries") == 1, f"Expected empty_soap_retries=1, got {update.get('empty_soap_retries')}"
+    assert any("empty" in f.lower() for f in update["feedback"]), "Feedback should mention empty sections"
+
+    # Second occurrence (retries exhausted): should escalate to human review
+    second = build_initial_state("ctx", "cc", "notes")
+    second.update({
+        "quality_flags": [empty_soap_flag],
+        "cycle_flags": {"validation": [empty_soap_flag], "coding": [], "scribe": []},
+        "coding_result": coding,
+        "empty_soap_retries": MAX_EMPTY_SOAP_RETRIES,
+    })
+    update = supervisor_node(second)
+    assert update["route_to"] == ROUTE_HUMAN_REVIEW, f"Expected human_review, got {update['route_to']}"
+    assert update.get("escalation_reason") == "empty_soap_exhausted", f"Expected empty_soap_exhausted, got {update.get('escalation_reason')}"
+    assert update["needs_human_review"] is True, "needs_human_review should be True"
+
+
 def test_version_and_constants():
     print("\nVersion and constants")
     check("pipeline version bumped", PIPELINE_VERSION == "3.1-supervisor-revalidate", PIPELINE_VERSION)
@@ -520,6 +554,7 @@ def main():
     test_autofix_revalidation_uses_real_validation()
     test_post_fix_integrity_flags()
     test_spent_revalidation_budget_hands_the_gap_to_coding()
+    test_supervisor_escalates_on_empty_soap()
     test_version_and_constants()
 
     print("\n" + "=" * 70)

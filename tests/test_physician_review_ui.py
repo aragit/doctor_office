@@ -79,7 +79,7 @@ def _install_stubs(result_overrides=None):
 
     def fake_stream(patient_context, chief_complaint, retrieved_notes, mode, model_name=None,
                     patient_id=None, use_memory=True, physician_feedback=None,
-                    visit_context=None, specialty=None):
+                    visit_context=None, specialty=None, is_synthetic=False):
         calls["feedback"].append(physician_feedback)
         calls["visit_context"].append(visit_context)
         calls["specialty"].append(specialty)

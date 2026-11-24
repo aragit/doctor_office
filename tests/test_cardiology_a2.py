@@ -569,7 +569,9 @@ def test_p0_fixes_still_hold():
     from utils.llm import get_llm
 
     check("get_llm still accepts model_name", get_llm(model_name="gemma3:4b").model_name == "gemma3:4b")
-    check("get_llm still honours the mode", get_llm(mode="quality").model_name == MODEL_PRESETS["quality"])
+    # Phase 0 / item 0.4 removed fake "quality" preset; mode="quality" falls back to "fast"
+    check("get_llm still honours the mode (falls back to fast)",
+          get_llm(mode="quality").model_name == MODEL_PRESETS["fast"])
 
     facts = {"conditions": ["Type 2 Diabetes"] * 8, "medications": ["Metformin"] * 8,
              "allergies": ["Penicillin", "Sulfa", "Latex", "Codeine"]}

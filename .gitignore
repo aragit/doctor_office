@@ -55,3 +55,4 @@ temp/
 models/*.gguf
 data/memory/
 data/chroma_db/
+!.env.example

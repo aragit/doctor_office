@@ -245,7 +245,7 @@ def test_streaming_and_result_contract():
     steps = ["memory_load", "scribe", "cleanup", "coding", "validation", "supervisor", "memory_save"]
     orch.get_graph = lambda: _stub_graph(steps)
     try:
-        yielded = list(legacy_stream("ctx", "complaint", "notes", mode="fast"))
+        yielded = list(legacy_stream("ctx", "complaint", "notes", mode="fast", is_synthetic=True, patient_id="P001"))
         check("yields one snapshot per node", len(yielded) == len(steps), len(yielded))
         check(
             "snapshots arrive in graph order",

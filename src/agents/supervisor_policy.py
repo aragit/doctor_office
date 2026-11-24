@@ -59,6 +59,9 @@ __all__ = [
 # Maximum number of LLM re-passes before escalating to human review.
 MAX_RETRIES = 2
 
+# Maximum number of empty-SOAP retries before escalating to human review.
+MAX_EMPTY_SOAP_RETRIES = 1
+
 # Maximum number of *deterministic* auto-fix rounds the Supervisor may run.
 #
 # Counted separately from MAX_RETRIES because an auto-fix costs no LLM call: it
@@ -217,6 +220,8 @@ def classify_flags(quality_flags: List[str]) -> Dict[str, List[str]]:
         lowered = flag.lower()
         if any(m in lowered for m in _HALLUCINATION_MARKERS):
             buckets["scribe"].append(flag)
+        elif "soap_empty" in lowered:
+            buckets["scribe"].append(flag)
         elif any(m in lowered for m in _UNGROUNDED_MARKERS):
             buckets["coding"].append(flag)
         elif any(m in lowered for m in _CPT_STATUS_MARKERS):
@@ -310,6 +315,7 @@ def determine_route(
     coding_result: Optional[Dict[str, Any]],
     chief_complaint: str = "",
     max_retries: int = MAX_RETRIES,
+    empty_soap_retries: int = 0,
     *,
     pending_revalidation: bool = False,
     revalidation_passes: int = 0,
@@ -412,6 +418,34 @@ def determine_route(
 
     scribe_flags, coding_flags = buckets["scribe"], buckets["coding"]
 
+    # Handle soap_empty flag with separate retry budget
+    soap_empty_flags = [f for f in scribe_flags if "soap_empty" in f.lower()]
+    if soap_empty_flags:
+        if int(empty_soap_retries or 0) >= MAX_EMPTY_SOAP_RETRIES:
+            return SupervisorDecision(
+                class_="human_review",
+                route_to=ROUTE_HUMAN_REVIEW,
+                feedback=[
+                    f"SOAP note still empty after {MAX_EMPTY_SOAP_RETRIES} retry; "
+                    f"routing to human review rather than finalizing empty note."
+                ],
+                escalated=True,
+                symptom_codes=[],
+                escalation_reason="empty_soap_exhausted",
+            )
+        # First empty SOAP occurrence -> retry scribe with targeted feedback
+        return SupervisorDecision(
+            class_="retry_scribe",
+            route_to=ROUTE_RETRY_SCRIBE,
+            feedback=[
+                "The generated SOAP note has all four sections empty (subjective, "
+                "objective, assessment, plan). Generate a complete note grounded in "
+                "the patient context and chief complaint. Do not leave any section blank."
+            ],
+            escalated=False,
+            symptom_codes=[],
+        )
+
     # 2. A hallucination / ungrounded code needs a regenerated note or codes.
     issue_class: Optional[str] = None
     if scribe_flags:
@@ -489,6 +523,7 @@ class VisitSupervisorPolicy:
         revalidation_passes: int = 0,
         revalidation_stalls: int = 0,
         max_revalidations: int = MAX_REVALIDATIONS,
+        empty_soap_retries: int = 0,
     ) -> SupervisorDecision:
         return determine_route(
             quality_flags,
@@ -496,6 +531,7 @@ class VisitSupervisorPolicy:
             coding_result,
             chief_complaint,
             max_retries,
+            empty_soap_retries=empty_soap_retries,
             pending_revalidation=pending_revalidation,
             revalidation_passes=revalidation_passes,
             revalidation_stalls=revalidation_stalls,

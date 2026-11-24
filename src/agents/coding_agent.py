@@ -19,6 +19,41 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+# Chronic condition to ICD-10 mapping for prompt injection
+CHRONIC_CONDITION_ICD10_MAP = {
+    "type 2 diabetes": "E11.9 - Type 2 diabetes mellitus without complications",
+    "diabetes mellitus type 2": "E11.9 - Type 2 diabetes mellitus without complications",
+    "diabetes": "E11.9 - Type 2 diabetes mellitus without complications",
+    "hypertension": "I10 - Essential (primary) hypertension",
+    "essential hypertension": "I10 - Essential (primary) hypertension",
+    "htn": "I10 - Essential (primary) hypertension",
+    "asthma": "J45.909 - Unspecified asthma",
+    "seasonal allergies": "J30.9 - Allergic rhinitis",
+    "allergic rhinitis": "J30.9 - Allergic rhinitis",
+}
+
+
+def extract_chronic_conditions(patient_context: str) -> List[str]:
+    """Extract known chronic conditions from patient_context and return their ICD-10 mappings."""
+    context_lower = patient_context.lower()
+    found = []
+    for condition, icd10 in CHRONIC_CONDITION_ICD10_MAP.items():
+        if condition in context_lower:
+            found.append(f"  - {condition.title()} → {icd10}")
+    return found
+
+
+def build_chronic_conditions_block(patient_context: str) -> str:
+    """Build the KNOWN CHRONIC CONDITIONS block for the coding prompt."""
+    conditions = extract_chronic_conditions(patient_context)
+    if not conditions:
+        return ""
+    block = "KNOWN CHRONIC CONDITIONS (from patient context):\n"
+    block += "\n".join(conditions)
+    block += "\n\nINSTRUCTION: Include these codes as primary/secondary ICD-10 when the SOAP Assessment mentions or clearly relates to them. Do not code conditions not referenced in the Assessment."
+    return block
+
+
 class CodingResult(BaseModel):
     """Medical coding result with ICD-10-CM, CPT, and medical necessity."""
     primary_icd10: str = Field(
@@ -81,6 +116,9 @@ def create_coding_chain(mode: str = "fast", model_name: Optional[str] = None):
         ("human", """Patient Context:
 {patient_context}
 
+KNOWN CHRONIC CONDITIONS:
+{chronic_conditions}
+
 SOAP Note:
 Subjective: {subjective}
 Objective: {objective}
@@ -138,6 +176,9 @@ def _create_raw_chain(mode: str = "fast", model_name: Optional[str] = None):
         ("human", """Patient Context:
 {patient_context}
 
+KNOWN CHRONIC CONDITIONS:
+{chronic_conditions}
+
 SOAP Note:
 Subjective: {subjective}
 Objective: {objective}
@@ -148,7 +189,7 @@ Existing ICD-10 from Scribe: {existing_icd10}
 
 {format_instructions}"""),
     ])
-    num_predict = 192 if mode == "fast" else 512
+    num_predict = 128 if mode == "fast" else 256
     if model_name:
         llm = get_llm(model_name=model_name, temperature=0.05, num_predict=num_predict)
     else:
@@ -172,12 +213,15 @@ def generate_coding(
     else:
         soap_dict = soap_note
 
+    chronic_conditions = build_chronic_conditions_block(patient_context)
+
     chain = create_coding_chain(mode=mode, model_name=model_name)
     format_instructions = chain.steps[-1].get_format_instructions() if hasattr(chain.steps[-1], 'get_format_instructions') else ""
 
     try:
         result = chain.invoke({
             "patient_context": patient_context,
+            "chronic_conditions": chronic_conditions,
             "subjective": soap_dict.get("subjective", ""),
             "objective": soap_dict.get("objective", ""),
             "assessment": soap_dict.get("assessment", ""),
@@ -202,6 +246,7 @@ def generate_coding(
         raw_chain = _create_raw_chain(mode=mode, model_name=model_name)
         raw_output = raw_chain.invoke({
             "patient_context": patient_context,
+            "chronic_conditions": chronic_conditions,
             "subjective": soap_dict.get("subjective", ""),
             "objective": soap_dict.get("objective", ""),
             "assessment": soap_dict.get("assessment", ""),

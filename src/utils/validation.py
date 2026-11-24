@@ -4,7 +4,7 @@ Provides lightweight guardrails to detect hallucinated diagnoses and incorrect c
 """
 
 import re
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 
 from utils.cardiac_claims import (
     has_charted_cardiac_diagnosis,
@@ -272,7 +272,8 @@ def run_full_validation(
     coding_result: Dict[str, Any],
     patient_context: str,
     chief_complaint: str,
-    extra_context: str = ""
+    extra_context: str = "",
+    soap_note: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Run complete validation on pipeline output.
@@ -280,10 +281,20 @@ def run_full_validation(
     Args:
         extra_context: Optional clinician-provided visit text (HPI, exam, tests)
             that widens the grounding set.
+        soap_note: Optional full SOAP note to check for empty sections.
 
     Returns combined quality_flags and validation results.
     """
     all_quality_flags = []
+    
+    # Check for empty SOAP note (all four sections empty/whitespace)
+    if soap_note:
+        subjective = str(soap_note.get("subjective", "") or "").strip()
+        objective = str(soap_note.get("objective", "") or "").strip()
+        assessment = str(soap_note.get("assessment", "") or "").strip()
+        plan = str(soap_note.get("plan", "") or "").strip()
+        if not subjective and not objective and not assessment and not plan:
+            all_quality_flags.append("soap_empty: All SOAP sections (subjective, objective, assessment, plan) are empty")
     
     # Validate Scribe ICD-10 suggestions
     scribe_codes = extract_icd10_from_list(soap_icd10)

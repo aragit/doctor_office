@@ -69,10 +69,11 @@ def test_get_llm_model_name():
     check("other kwargs still apply", llm.max_tokens == 32, llm.max_tokens)
 
     check("mode default still resolves", get_llm().model_name == MODEL_PRESETS["fast"], get_llm().model_name)
-    check("quality mode still resolves",
-          get_llm(mode="quality").model_name == MODEL_PRESETS["quality"])
+    # Phase 0 / item 0.4 removed fake "quality" preset; mode="quality" falls back to "fast"
+    check("mode='quality' falls back to fast",
+          get_llm(mode="quality").model_name == MODEL_PRESETS["fast"])
     check("mode works alongside num_predict",
-          get_llm("quality", 0.0, 256).model_name == MODEL_PRESETS["quality"])
+          get_llm("quality", 0.0, 256).model_name == MODEL_PRESETS["fast"])
     check("blank model_name falls back to the mode",
           get_llm(mode="fast", model_name="   ").model_name == MODEL_PRESETS["fast"])
     check("model_name overrides mode",
@@ -102,8 +103,9 @@ def test_get_llm_model_name():
               _pinned_model(chain) == "gemma3:4b", _pinned_model(chain))
 
         mode_chain = factory(mode="quality")
-        check(f"{name} still honours the mode",
-              _pinned_model(mode_chain) == MODEL_PRESETS["quality"], _pinned_model(mode_chain))
+        # Phase 0 / item 0.4 removed fake "quality" preset; mode="quality" falls back to "fast"
+        check(f"{name} honours the mode (falls back to fast)",
+              _pinned_model(mode_chain) == MODEL_PRESETS["fast"], _pinned_model(mode_chain))
 
 
 # --- 3. malformed ICD-10 codes are actually removed -------------------------
@@ -379,7 +381,7 @@ def _stub_offline_app(result_overrides=None):
     # The pipeline's own memory-save step: a draft, echoed back with its id.
     def fake_stream(patient_context, chief_complaint, retrieved_notes, mode, model_name=None,
                     patient_id=None, use_memory=True, physician_feedback=None,
-                    visit_context=None, specialty=None):
+                    visit_context=None, specialty=None, is_synthetic=False):
         snapshot = dict(result)
         metadata = dict(result["metadata"], visit_context=dict(visit_context or {}))
         escalated = bool((metadata.get("supervisor") or {}).get("needs_human_review"))
@@ -405,6 +407,10 @@ def _stub_offline_app(result_overrides=None):
     return repo, calls
 
 
+import pytest
+
+
+@pytest.mark.parametrize("escalated", [False, True])
 def test_approve_and_save_writes_the_visit(escalated: bool):
     """Approve & Save must reach the store with the documented signature."""
     print(f"\nApprove & Save persists the visit (escalated={escalated})")
