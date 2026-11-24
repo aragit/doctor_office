@@ -91,7 +91,7 @@ Existing ICD-10 from Scribe: {existing_icd10}
 
 {format_instructions}"""),
     ])
-    num_predict = 192 if mode == "fast" else 512
+    num_predict = 128 if mode == "fast" else 256
     if model_name:
         llm = get_llm(model_name=model_name, temperature=0.05, num_predict=num_predict)
     else:

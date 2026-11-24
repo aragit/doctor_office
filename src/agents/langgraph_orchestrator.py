@@ -449,7 +449,7 @@ Last Visit: {patient['last_visit_summary']}
 """
 
     vs = get_vectorstore()
-    from ..config import RAG_TOP_K
+    from utils.config import RAG_TOP_K
     retrieved_docs = vs.similarity_search("diabetes hypertension management", k=RAG_TOP_K)
     retrieved_notes = "\n\n".join([doc.page_content for doc in retrieved_docs])
 
@@ -472,6 +472,7 @@ Last Visit: {patient['last_visit_summary']}
         retrieved_notes=retrieved_notes,
         mode=mode,
         patient_id="P001",
+        is_synthetic=True,
     )
 
     print("\n--- SOAP NOTE ---")

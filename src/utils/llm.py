@@ -38,23 +38,23 @@ def get_llm(
     Returns:
         Configured ChatOpenAI instance.
     """
+    # Priority: explicit model_name > LLM_MODEL_NAME env var (via get_model_name) > mode preset
     resolved_model = (model_name or "").strip() or get_model_name(mode)
-    
+
     # Use provided num_predict or fall back to mode-based default
     if num_predict is None:
         num_predict = get_max_tokens(mode)
-    
-    logger.debug(
-        "get_llm: mode=%s model_name=%s -> %s, num_predict=%d, base_url=%s",
-        mode, model_name, resolved_model, num_predict, LLM_BASE_URL
-    )
-    
+
+    logger.info("Using LLM model: %s (mode=%s, explicit_model=%s)", resolved_model, mode, model_name)
+
     return ChatOpenAI(
         model=resolved_model,
         temperature=temperature,
         max_tokens=num_predict,
         base_url=LLM_BASE_URL,
         api_key=LLM_API_KEY,
+        timeout=120,  # 2-minute timeout per request
+        max_retries=1,  # Fail fast, don't retry on timeout
     )
 
 

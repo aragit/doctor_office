@@ -3,18 +3,19 @@
 import os
 from typing import Optional
 
-# Model presets - logical mode labels, not specific model files
+# Model presets - logical mode labels for Ollama-compatible models
 MODEL_PRESETS = {
-    "fast": "qwen2.5-1.5b-instruct",
-    "quality": "qwen2.5-1.5b-instruct",  # Same weights unless user loads larger GGUF
+    "fast": "qwen2.5:1.5b",
+    # "quality": REMOVED — no larger artifact pinned. Add back in Phase 2.
+    # gemma3:4b available but too slow on CPU (>3 min for simple query)
 }
 
 DEFAULT_MODE = "fast"
 
 # LLM connection settings (OpenAI-compatible API)
-LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://127.0.0.1:8080/v1")
+LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://127.0.0.1:11434/v1")
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "EMPTY")
-LLM_MODEL_NAME = os.environ.get("LLM_MODEL_NAME", "local")
+LLM_MODEL_NAME = os.environ.get("LLM_MODEL_NAME", "qwen2.5:1.5b")
 
 # Generation limits for CPU efficiency
 FAST_MAX_TOKENS = int(os.environ.get("LLM_FAST_MAX_TOKENS", "384"))
@@ -30,12 +31,20 @@ ALLOW_REAL_PHI = os.environ.get("ALLOW_REAL_PHI", "false").lower() == "true"
 def get_model_name(mode: str = DEFAULT_MODE) -> str:
     """Get the model label for a given mode.
 
+    Priority:
+    1. LLM_MODEL_NAME environment variable (explicit user override)
+    2. Mode-based preset from MODEL_PRESETS
+    3. Default fallback
+
     Args:
         mode: Either "fast" or "quality". Defaults to "fast".
 
     Returns:
         The model label string.
     """
+    # Environment variable takes highest priority
+    if LLM_MODEL_NAME and LLM_MODEL_NAME != "local":
+        return LLM_MODEL_NAME
     return MODEL_PRESETS.get(mode, MODEL_PRESETS[DEFAULT_MODE])
 
 

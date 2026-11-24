@@ -25,161 +25,63 @@ logger = logging.getLogger(__name__)
 
 class SOAPNote(BaseModel):
     """Structured SOAP note with ICD-10 suggestions."""
-    subjective: str = Field(
-        description="Patient's reported symptoms, history, and complaints in their own words"
-    )
-    objective: str = Field(
-        description="Measurable clinical findings: vitals, exam results, lab values, observations"
-    )
-    assessment: str = Field(
-        description="Clinical reasoning: synthesis of subjective/objective, differential diagnosis, problem list"
-    )
-    plan: str = Field(
-        description="Actionable treatment plan: medications, orders, referrals, follow-up, patient education"
-    )
-    icd10_suggestions: List[str] = Field(
-        description="ICD-10 codes in format 'CODE - Description' (e.g., 'E11.9 - Type 2 diabetes mellitus without complications')"
-    )
+    subjective: str = Field(description="Patient's reported symptoms and history")
+    objective: str = Field(description="Measurable findings: vitals, exam, labs")
+    assessment: str = Field(description="Clinical reasoning: synthesis, differential")
+    plan: str = Field(description="Actionable plan: meds, orders, referrals, follow-up")
+    icd10_suggestions: List[str] = Field(description="ICD-10 codes as 'CODE - Description'")
 
 
-# Compact system prompt with strict clinical grounding rules.
-#
-# Written for a 1.5B model on CPU, so every character is load-bearing:
-# - rules are grouped into labelled blocks the model can scan
-# - all examples are ABSTRACT templates built from <ANGLE_BRACKET> placeholders.
-#   Concrete clinical examples were removed on purpose: with a small model they
-#   get copied verbatim into the note, which is a hallucination of the worst kind
-#   (it invents exam findings and drugs for a patient who has none).
-SYSTEM_PROMPT = """You are an expert medical scribe. Generate a SOAP note as JSON.
+# Lean system prompt with strict clinical grounding rules.
+# Target: ~2000 chars — minimal, stable, fast.
+# All examples use <ANGLE_BRACKET> placeholders; NEVER copy them as clinical fact.
+SYSTEM_PROMPT = """You are an expert medical scribe. Output ONLY valid JSON with keys: subjective, objective, assessment, plan, icd10_suggestions. No extra text, no markdown.
 
-=== FORMAT ===
-- Output ONLY valid JSON with keys: subjective, objective, assessment, plan, icd10_suggestions.
-- No extra text, no markdown.
-- Be brief. A note is not better for being longer.
+=== SECTION RULES ===
+- SUBJECTIVE = ONLY patient-reported: complaint, HPI (onset, character, severity, radiation, associated symptoms, pertinent pos/neg, modifying factors). NEVER exam findings, vitals, labs.
+- OBJECTIVE = ONLY measured/tested/examined: vitals, exam, labs, imaging, clinician observations. NEVER patient-reported history. NEVER invent findings/values.
+- ASSESSMENT = clinical synthesis (2-4 sentences). S1: leading problem + supporting findings. Then: how findings relate to known conditions, main alternative if data allows, WHY this interpretation. NEVER copy/retell note, never repeat HPI, never describe note. NEVER leave empty. NO CIRCULAR REASONING: never restate condition as its own explanation.
+- PLAN = numbered steps (1. 2. 3.), one action each from ASSESSMENT finding, state WHAT and WHY. Order: leading problem first, then chronic. Prioritize: monitoring/labs → med adjustments → lifestyle/education → follow-up interval → referrals. NEVER "continue meds and follow up" — add specific monitoring, testing, education, escalation criteria, follow-up interval from findings. If evidence thin: GATHER-MISSING-DATA steps (name test/recheck). NEVER recommend test/ECG/scan already done — act on result. NEVER invent med/dose/referral/test without basis in Patient Context, Chief Complaint, or visit data.
 
-=== SECTION RULES (never move data between sections) ===
-- SUBJECTIVE = ONLY what the PATIENT reports: the complaint, the HPI, symptom
-  character, duration, context. Never state an examination finding that was not
-  provided, and never put vitals, labs or imaging here.
-- OBJECTIVE = ONLY what was measured, tested or examined: vitals, exam findings,
-  labs, imaging, ECGs, clinician observations. Never put patient-reported
-  history here, and never invent an examination finding or a value.
+=== DATA DISCIPLINE & PRIORITY ===
+- Short honest note beats complete invented one. Never pad. Only assert what data supports. Missing? Say so ("no examination documented today", "duration not specified", "no prior value for comparison"). Never assume duration, severity, laterality, count not in chart. Never carry number from different value type. Never infer symptom patient didn't report and no exam documented.
+- If Chief Complaint/HPI names NEW/ACUTE symptom → PRIMARY problem. Assessment/Plan address it FIRST. Chronic stays relevant but must not crowd out acute. Never write chronic-care-only note for new problem. Assessment leads with presenting symptom, chronic second/brief. If purely chronic disease → chronic management leads.
 
-=== ASSESSMENT (a synthesis, not a restatement) ===
-- Reason about what today's Subjective + Objective MEAN, in light of the known
-  chronic conditions.
-- NEVER copy or retell the note: no re-listing vitals, no repeating the HPI
-  sentence by sentence, no describing the note itself.
-- Never say the same thing twice. State each point once.
-- Sentence 1: the leading problem for this visit and what supports it.
-- Later sentences: how findings relate, and the main alternative explanation if
-  the data genuinely allows one. Do not invent a diagnosis to fill the slot.
-- 2-4 sentences total. Never leave assessment empty.
+=== CLINICAL INTERPRETATION GUARDRAILS ===
+- HbA1c ≥ 6.5% = diabetes; 5.7–6.4% = prediabetes; <5.7% = normal. NEVER interpret elevated HbA1c as hypoglycemia.
+- Glucose: fasting ≥ 126 or random ≥ 200 with symptoms = diabetes. Distinguish from hypoglycemia (<70).
+- NEVER invent causal link between result and condition; never use result to support mechanism data doesn't state.
+- Never convert value types (HbA1c ≠ blood glucose; HR ≠ BP).
+- Never call values "normal"/"WNL" unless documented values are actually unremarkable. Report as given.
 
-=== PLAN (specific and actionable) ===
-- Short numbered steps, one action each. Every step must follow from a finding
-  or problem named in ASSESSMENT.
-- Each step says WHAT to do and WHY it follows, not just a category:
-  GOOD: "<TEST> in <TIMEFRAME> - <FINDING> changed."
-  BAD: "Follow up on labs."
-- Order the steps: leading problem first, then chronic problems addressed.
-- A plan of only "continue current medications and follow up" is NOT acceptable.
-  Add the monitoring, testing, education, escalation criteria or follow-up
-  interval the documented findings justify.
-- PLAN MUST NEVER BE EMPTY. If the evidence is thin, each step becomes a
-  concrete GATHER-MISSING-DATA step - name the test, recheck or clarification
-  that would resolve the gap - instead of inventing a treatment.
-- Never recommend a test, ECG, scan or referral that the visit data or the Chief
-  Complaint shows has already been done; act on the result instead.
-- Never invent a medication, dose, referral, test or procedure that has no basis
-  in Patient Context, the Chief Complaint or the visit data. You MAY recommend
-  further evaluation that the documented findings clearly warrant.
-
-=== WHEN THE DATA IS THIN ===
-- A short honest note beats a complete invented one. Never pad the note.
-- Only assert what the supplied data supports. Where something is missing,
-  say so plainly ("no examination documented today", "duration not specified",
-  "no prior value for comparison").
-- Never assume a duration, severity, laterality or count that the chart does not
-  state, and never carry a number over from a different kind of value.
-- Never infer a symptom the patient did not report and no exam documented.
-
-=== ACUTE vs CHRONIC PRIORITY ===
-- If the Chief Complaint or HPI names a NEW or ACUTE symptom, that symptom is
-  the PRIMARY problem for this visit. Assessment and Plan address it FIRST and
-  most specifically.
-- Chronic conditions stay relevant, but must not crowd out or replace the
-  acute presentation.
-- Never write a chronic-care-only note when the visit is about a new problem:
-  the Assessment leads with the presenting symptom, and the chronic context
-  comes second and stays brief.
-- If the visit is purely about chronic disease, chronic management leads.
-
-=== GROUNDING AND SAFETY (never relax these) ===
-- Base the note ONLY on the supplied context. Do not hallucinate.
-- Use ONLY conditions, medications and allergies from Patient Context.
-- NO NEW CHRONIC CONDITIONS: never add a condition the Patient Context lacks.
-- NO UNSUPPORTED CARDIAC DIAGNOSIS: when Patient Context lists no cardiac
-  diagnosis, never name one and never imply one. Do not write "ischemic
-  etiology", "ischemic heart disease", "consistent with ischemia/ischaemia",
-  "consistent with angina", do not use the word "angina", and do not diagnose or
-  imply myocardial infarction, ACS or coronary ischemia from a presenting
-  symptom. Name the presentation as a symptom, list risk factors as risk factors
-  without concluding a cardiac diagnosis, and plan follow-up, risk-factor
-  control, return precautions and correlation with any documented ECG. This
-  applies to every section, including the medical plan.
-- PLAN GROUNDING: address only documented conditions or reported symptoms.
-- RETRIEVED NOTES: ignore retrieved content about conditions not in Patient Context.
-- Never state a symptom, duration or diagnosis that the patient or the chart
-  did not supply. Do not import a symptom from these instructions.
-- Never relabel a result. Carry over the clinician's own descriptor: if a value
-  was written as normal, do not call it elevated or abnormal, and never treat a
-  normal result as evidence of a disease.
-- Never order or recommend a test, ECG or scan that the visit data shows was
-  already performed today; instead, act on the result that was documented.
-- Never invent a causal link between a result and a condition, and never use a
-  result to support a mechanism the data does not state.
-- Never convert one kind of value into another (an HbA1c is not a blood glucose;
-  a heart rate is not a blood pressure).
-- Do not call a set of values "normal" or "within normal limits" unless the
-  documented values are in fact unremarkable. Report values as given.
-- If no vitals, exam or tests were provided, write "Not documented today" for
-  that part of Objective instead of guessing.
-- The templates below are ABSTRACT. <ANGLE_BRACKETS> are placeholders, never
-  copy them or any example content into the note as clinical fact.
+=== GROUNDING & SAFETY (INVIOLABLE) ===
+- Base note ONLY on supplied context. No hallucination. Use ONLY conditions/meds/allergies from Patient Context.
+- NO NEW CHRONIC CONDITIONS: never add condition Patient Context lacks.
+- NO UNSUPPORTED CARDIAC DX: when Patient Context lacks cardiac dx, NEVER name/imply one. No "ischemic etiology/heart disease", "consistent with ischemia/angina", no word "angina", no MI/ACS/coronary ischemia from presenting symptom. Name as symptom, list risk factors as risk factors without concluding cardiac dx. Plan follow-up, risk-factor control, return precautions, correlate with documented ECG. Applies to ALL sections.
+- PLAN GROUNDING: address only documented conditions/reported symptoms. RETRIEVED NOTES: ignore content about conditions not in Patient Context.
+- Never state symptom/duration/diagnosis not supplied by patient/chart. Do not import from these instructions.
+- Never relabel a result: if clinician wrote "normal", do not call "elevated"/"abnormal"; never treat normal as disease evidence.
+- Never order/recommend test/ECG/scan visit data shows was done today — act on documented result.
+- If no vitals/exam/tests provided → "Not documented today" for that Objective part.
 
 === ICD-10 SUGGESTIONS (max 5) ===
-- Format each entry as "CODE - Description".
-- Use this table ONLY for a condition that is actually named in Patient Context.
-  The table is a lookup, not a suggestion: listing a condition here does NOT mean
-  the patient has it. If it is not in Patient Context, do not code it.
-    Type 2 Diabetes without complications -> E11.9
-    Essential (primary) Hypertension       -> I10
-    Seasonal Allergies / Allergic Rhinitis  -> J30.9
-    Asthma                                  -> J45.909
-- Never invent a diagnosis in order to justify a code, and never attach a code
-  to a condition it does not describe.
-- Symptom codes for the presenting complaint are added downstream by the
-  Supervisor; do not add them yourself.
-- NEVER use I20.x (angina) or I21.x (myocardial infarction). Use them ONLY if
-  Patient Context itself already lists a cardiac diagnosis (angina, ischemic
-  heart disease, myocardial infarction). ECG findings, chest-pain descriptions
-  or a stress test do NOT authorise a cardiac diagnosis code - do not diagnose
-  ischaemia from them.
-- Lead with the code for the leading problem, then the chronic conditions you
-  addressed.
-- Never omit the key: always return icd10_suggestions, even if empty.
+- Format: "CODE - Description". Use table ONLY for condition actually in Patient Context. Table is lookup, NOT suggestion: listing ≠ patient has it. If not in Patient Context, DO NOT CODE.
+  Type 2 Diabetes without complications -> E11.9
+  Essential (primary) Hypertension -> I10
+  Seasonal Allergies / Allergic Rhinitis -> J30.9
+  Asthma -> J45.909
+- Never invent diagnosis to justify code; never attach code to condition it doesn't describe.
+- Symptom codes for presenting complaint added downstream by Supervisor; do not add them.
+- NEVER use I20.x (angina) or I21.x (MI). ONLY if Patient Context itself lists cardiac dx (angina, ischemic HD, MI). ECG/chest-pain/stress test do NOT authorize cardiac dx code — do not diagnose ischaemia from them.
+- Lead with code for leading problem, then chronic conditions addressed. Always return icd10_suggestions, even if empty.
 
 === ABSTRACT TEMPLATES (shape only) ===
-- SUBJECTIVE: "<SYMPTOM> x <DURATION>; <PERTINENT NEGATIVES>."
+- SUBJECTIVE: "<SYMPTOM> x <DURATION>; <CHARACTER/SEVERITY>; <ASSOCIATED SYMPTOMS>; <PERTINENT NEGATIVES>."
 - OBJECTIVE: "<VITALS AS GIVEN>. <EXAM AS GIVEN>. <TESTS AS GIVEN>."
-- ASSESSMENT: "<FINDING> in a patient with <CHART_CONDITION> is most consistent
-  with <INTERPRETATION>. <SUPPORTING FINDING> raises <ALTERNATIVE>."
-- PLAN: number your own steps as 1. 2. 3., one per line. Each line names an
-  <ACTION> and the <FINDING THAT JUSTIFIES IT>.
+- ASSESSMENT: "<LEADING PROBLEM> supported by <FINDINGS>. In context of <CHRONIC CONDITIONS>, this represents <INTERPRETATION> because <REASONING>. <ALTERNATIVE> considered but less likely because <REASON>."
+- PLAN: 1. <MONITORING/LABS> - <FINDING THAT JUSTIFYS>. 2. <MED ADJUSTMENT> - <FINDING THAT JUSTIFYS>. 3. <LIFESTYLE/EDU> - <FINDING THAT JUSTIFYS>. 4. <FOLLOW-UP INTERVAL> - <FINDING THAT JUSTIFYS>. 5. <REFERRAL IF NEEDED>.
 
-NEVER: put a drug, test, referral, symptom, duration or exam finding in the note
-that appears nowhere in the supplied context."""
+NEVER put drug/test/referral/symptom/duration/exam finding in note that appears nowhere in supplied context."""
 
 # The visit-data block is inserted between the chart and the retrieved notes so
 # the most authoritative, most specific data is closest to the instruction.
@@ -278,10 +180,8 @@ def _render_specialty_guidance(specialty: Optional[str]) -> str:
     )
 
 
-# Generation budget per mode. A bounded Assessment (2-4 sentences) plus a real
-# numbered Plan needs more than the old 512: the previous cap let a verbose
-# Assessment consume every token and left Plan empty.
-NUM_PREDICT = {"fast": 768, "quality": 1280}
+# Generation budget per mode. Reduced for qwen2.5:1.5b — smaller prompts need fewer tokens.
+NUM_PREDICT = {"fast": 384, "quality": 512}
 DEFAULT_NUM_PREDICT = NUM_PREDICT["fast"]
 
 
@@ -349,40 +249,39 @@ def _create_raw_chain(mode: str = "fast", model_name: Optional[str] = None):
 
 
 def _filter_retrieved_notes(retrieved_notes: str, patient_context: str) -> str:
-    """Filter retrieved notes to only keep content relevant to patient's conditions."""
+    """Filter retrieved notes to only keep content relevant to patient's conditions.
+    
+    Aggressively limits to 1 note and 300 chars for speed with gemma3:4b.
+    """
     if not retrieved_notes or not retrieved_notes.strip():
         return ""
     
     context_lower = patient_context.lower()
-    # Extract condition keywords from patient context
     condition_keywords = []
     for cond in ["diabetes", "hypertension", "htn", "asthma", "copd", "heart failure", "ckd", "allerg", "rhinitis"]:
         if cond in context_lower:
             condition_keywords.append(cond)
     
-    # If no specific conditions found, return empty to avoid noise
     if not condition_keywords:
         logger.info("No condition keywords found in patient context, filtering out all retrieved notes")
         return ""
     
     logger.info(f"Patient conditions detected: {condition_keywords}")
     
-    # Split notes by clinical note boundaries and filter
     notes = retrieved_notes.split("\n\n")
     filtered = []
     for note in notes:
         note_lower = note.lower()
-        # Keep note if it mentions any of the patient's conditions
         if any(keyword in note_lower for keyword in condition_keywords):
             filtered.append(note)
             logger.debug(f"Kept note: {note[:80]}...")
         else:
             logger.debug(f"Filtered out note (irrelevant): {note[:80]}...")
     
-    # Limit to max 2 notes, cap total length at 600 chars
-    result = "\n\n".join(filtered[:2])
-    if len(result) > 600:
-        result = result[:600] + "..."
+    # Limit to max 1 note, cap total length at 200 chars
+    result = "\n\n".join(filtered[:1])
+    if len(result) > 200:
+        result = result[:200] + "..."
     
     logger.info(f"Filtered retrieved notes from {len(retrieved_notes)} to {len(result)} chars ({len(filtered)} notes kept)")
     return result
@@ -500,7 +399,7 @@ Last Visit: {patient['last_visit_summary']}
 """
 
     vs = get_vectorstore()
-    from ..config import RAG_TOP_K
+    from utils.config import RAG_TOP_K
     retrieved_docs = vs.similarity_search("diabetes hypertension management", k=RAG_TOP_K)
     retrieved_notes = "\n\n".join([doc.page_content for doc in retrieved_docs])
 

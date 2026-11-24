@@ -183,7 +183,7 @@ def _is_tagged_section(section: str) -> bool:
 # Fast mode runs a 1.5B model on CPU; cap the injected block so a long HPI
 # cannot slow the pipeline down. Matches the notes/facts caps used elsewhere.
 # The budget covers data AND rules: rules are never truncated, the data is.
-MAX_BLOCK_CHARS = 1400
+MAX_BLOCK_CHARS = 500
 
 BLOCK_HEADER = "CLINICAL DATA PROVIDED BY THE CLINICIAN FOR THIS VISIT (authoritative):"
 BLOCK_RULES = (
