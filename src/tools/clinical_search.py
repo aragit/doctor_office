@@ -28,7 +28,7 @@ DESCRIPTION_SEARCH = (
 def search_clinical_notes(
     query: str,
     patient_id: Optional[str] = None,
-    k: int = 3,
+    k: int = 1,
 ) -> Dict[str, Any]:
     """Search the clinical reference vector store.
 
@@ -102,7 +102,7 @@ def search_clinical_notes(
     return result
 
 
-def format_search_result(result: Dict[str, Any], char_limit: int = 600) -> str:
+def format_search_result(result: Dict[str, Any], char_limit: int = 300) -> str:
     """Render a search result as a compact prompt block."""
     blocks: List[str] = []
     if result.get("patient_context"):

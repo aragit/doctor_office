@@ -1174,8 +1174,8 @@ if st.session_state.should_run_pipeline:
         try:
             vs = get_vectorstore()
 
-            retrieved_docs = vs.similarity_search(params["chief_complaint"], k=3)
-            retrieved_notes = "\n\n".join([doc.page_content for doc in retrieved_docs])
+            retrieved_docs = vs.similarity_search(params["chief_complaint"], k=1)
+            retrieved_notes = "\n\n".join([doc.page_content for doc in retrieved_docs])[:300]
 
             # Run pipeline with progress updates per LangGraph node
             node_order = [
@@ -1446,8 +1446,8 @@ if st.session_state.pipeline_result:
                     continue
                 st.markdown(f"**`{node}`**")
                 for tool_name, payload in trace.items():
-                    with st.expander(tool_name, expanded=False):
-                        st.json(payload)
+                    st.markdown(f"**🔧 Tool Call: {tool_name}**")
+                    st.json(payload)
 
         with tech_tab2:
             st.subheader("Full Pipeline Output")

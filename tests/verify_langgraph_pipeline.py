@@ -79,8 +79,8 @@ def get_retrieved_notes(chief_complaint: str) -> str:
         from rag.simple_rag import get_vectorstore
 
         vs = get_vectorstore()
-        docs = vs.similarity_search(chief_complaint, k=3)
-        return "\n\n".join(doc.page_content for doc in docs)
+        docs = vs.similarity_search(chief_complaint, k=1)
+        return "\n\n".join(doc.page_content for doc in docs)[:300]
     except Exception as exc:  # pragma: no cover - environment dependent
         print(f"  [warn] RAG unavailable ({exc}); continuing without retrieved notes")
         return ""

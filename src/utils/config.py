@@ -22,7 +22,7 @@ FAST_MAX_TOKENS = int(os.environ.get("LLM_FAST_MAX_TOKENS", "384"))
 QUALITY_MAX_TOKENS = int(os.environ.get("LLM_QUALITY_MAX_TOKENS", "384"))
 
 # RAG configuration
-RAG_TOP_K = int(os.environ.get("RAG_TOP_K", "2"))
+RAG_TOP_K = int(os.environ.get("RAG_TOP_K", "1"))
 
 # Synthetic-data guard configuration
 ALLOW_REAL_PHI = os.environ.get("ALLOW_REAL_PHI", "false").lower() == "true"
