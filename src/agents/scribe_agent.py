@@ -38,7 +38,7 @@ class SOAPNote(BaseModel):
 SYSTEM_PROMPT = """You are an expert medical scribe. Output ONLY valid JSON with keys: subjective, objective, assessment, plan, icd10_suggestions. No extra text, no markdown.
 
 === SECTION RULES ===
-- SUBJECTIVE = ONLY patient-reported: complaint, HPI (onset, character, severity, radiation, associated symptoms, pertinent pos/neg, modifying factors). NEVER exam findings, vitals, labs.
+- SUBJECTIVE = ONLY patient-reported: complaint, HPI (onset, character, severity, radiation, associated symptoms, pertinent pos/neg, modifying factors). NEVER exam findings, vitals, labs. MANDATORY: The Subjective section must NEVER be empty. If the chief complaint indicates a routine follow-up and no new symptoms are reported, you MUST synthesize a Subjective statement based on the patient's Last Visit Summary and active conditions. Example: 'Patient presents for routine follow-up of Type 2 Diabetes and Hypertension. Denies any new acute symptoms.' Do not output 'No reported symptoms' alone.
 - OBJECTIVE = ONLY measured/tested/examined: vitals, exam, labs, imaging, clinician observations. NEVER patient-reported history. NEVER invent findings/values.
 - ASSESSMENT = clinical synthesis (2-4 sentences). S1: leading problem + supporting findings. Then: how findings relate to known conditions, main alternative if data allows, WHY this interpretation. NEVER copy/retell note, never repeat HPI, never describe note. NEVER leave empty. NO CIRCULAR REASONING: never restate condition as its own explanation.
 - PLAN = numbered steps (1. 2. 3.), one action each from ASSESSMENT finding, state WHAT and WHY. Order: leading problem first, then chronic. Prioritize: monitoring/labs → med adjustments → lifestyle/education → follow-up interval → referrals. NEVER "continue meds and follow up" — add specific monitoring, testing, education, escalation criteria, follow-up interval from findings. If evidence thin: GATHER-MISSING-DATA steps (name test/recheck). NEVER recommend test/ECG/scan already done — act on result. NEVER invent med/dose/referral/test without basis in Patient Context, Chief Complaint, or visit data.
@@ -181,7 +181,7 @@ def _render_specialty_guidance(specialty: Optional[str]) -> str:
 
 
 # Generation budget per mode. Reduced for qwen2.5:1.5b — smaller prompts need fewer tokens.
-NUM_PREDICT = {"fast": 384, "quality": 512}
+NUM_PREDICT = {"fast": 384, "quality": 384}
 DEFAULT_NUM_PREDICT = NUM_PREDICT["fast"]
 
 

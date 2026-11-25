@@ -210,6 +210,7 @@ def _control_flow_metadata(state: AgentState) -> Dict[str, Any]:
         "final_route": state.get("route_to") or "",
         "final_decision": state.get("supervisor_decision") or "",
         "escalation_reason": state.get("escalation_reason") or "",
+        "empty_soap_retries": int(state.get("empty_soap_retries", 0) or 0),
     }
 
 
