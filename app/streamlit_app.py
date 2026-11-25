@@ -1023,13 +1023,14 @@ with st.sidebar:
     patient = patients[selected_idx]
 
     st.divider()
-    st.subheader("Patient Details")
-    st.write(f"**Age:** {patient['age']}")
-    st.write(f"**Gender:** {patient['gender']}")
-    st.write(f"**Conditions:** {', '.join(patient['conditions'])}")
-    st.write(f"**Medications:** {', '.join(patient['medications'])}")
-    st.write(f"**Allergies:** {', '.join(patient['allergies']) or 'None'}")
-    st.write(f"**Last Visit:** {patient['last_visit_summary']}")
+    with st.container(border=True):
+        st.subheader("Patient Details")
+        st.write(f"**Age:** {patient['age']}")
+        st.write(f"**Gender:** {patient['gender']}")
+        st.write(f"**Conditions:** {', '.join(patient['conditions'])}")
+        st.write(f"**Medications:** {', '.join(patient['medications'])}")
+        st.write(f"**Allergies:** {', '.join(patient['allergies']) or 'None'}")
+        st.write(f"**Last Visit:** {patient['last_visit_summary']}")
 
     st.divider()
     st.subheader("Long-Term Memory")
@@ -1306,9 +1307,10 @@ if st.session_state.pipeline_result:
     coding = result["coding_result"]
     meta = result.get("metadata", {})
 
-    # Create tabs for SOAP, Coding, Memory/Tools, Raw JSON, and Physician Review
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(
-        ["📋 SOAP Note", "🔖 Coding Result", "🧠 Memory & Tools", "📄 Raw JSON", "👨‍⚕️ Physician Review"]
+    # Create tabs for SOAP, Coding, and Physician Review (prominent)
+    # Memory & Tools and Raw JSON moved to collapsible expander below
+    tab1, tab2, tab3 = st.tabs(
+        ["📋 SOAP Note", "🔖 Coding Result", "👨‍⚕️ Physician Review"]
     )
 
     with tab1:
@@ -1365,84 +1367,88 @@ if st.session_state.pipeline_result:
                 st.write(cpt_grounding.get("justification", ""))
 
     with tab3:
-        st.subheader("Long-Term Memory")
-        mem_meta = meta.get("memory", {})
-        if use_memory:
-            st.write(f"**Patient ID:** {mem_meta.get('patient_id')}")
-            st.write(
-                f"**Approved visits on record:** {mem_meta.get('prior_visits', 0)} "
-                "(the only visits read as this patient's history)"
-            )
-            st.write(
-                "**History used in this note:** "
-                + ("Yes" if mem_meta.get("memory_context_used") else "No")
-            )
-            st.write(
-                "**This run recorded:** "
-                + (
-                    f"draft `{mem_meta.get('visit_id')}` (unsigned - not history "
-                    f"until a physician approves it)"
-                    if mem_meta.get("saved")
-                    else "nothing"
-                )
-            )
-            st.write(
-                f"**Drafts / approved on file:** "
-                f"{mem_meta.get('draft_visit_count', 0)} / "
-                f"{mem_meta.get('approved_visit_count', 0)}"
-            )
-            if mem_meta.get("memory_context"):
-                with st.expander("History text supplied to the agents"):
-                    st.text(mem_meta["memory_context"])
-        else:
-            st.info("Memory was disabled for this run; nothing was read or written.")
-
-        st.divider()
-        st.subheader("Supervisor (routing / retries)")
-        sup_meta = meta.get("supervisor", {})
-        st.write(f"**Retries:** {sup_meta.get('retry_count', 0)}")
-        st.write(
-            "**Status:** "
-            + (
-                "Escalated for human review" if sup_meta.get("needs_human_review")
-                else "Completed"
-            )
-        )
-        if sup_meta.get("applied"):
-            st.write("**Auto-applied fixes:**")
-            for fix in sup_meta["applied"]:
-                st.caption(f"• {fix}")
-        if sup_meta.get("feedback"):
-            with st.expander("Feedback passed to retry passes"):
-                for item in sup_meta["feedback"]:
-                    st.markdown(f"- {item}")
-
-        st.divider()
-        st.subheader("Tools Used This Visit")
-        tool_meta = meta.get("tools", {})
-        st.caption(
-            "The orchestrator grants each agent only the tools it needs; "
-            "the Scribe never sees the coding validation tool."
-        )
-        st.write("**Tools called:** " + (
-            ", ".join(f"`{t}`" for t in tool_meta.get("tools_used", []))
-            or "None"
-        ))
-        for node, trace in (tool_meta.get("tool_results") or {}).items():
-            if not trace:
-                continue
-            st.markdown(f"**`{node}`**")
-            for tool_name, payload in trace.items():
-                with st.expander(tool_name, expanded=False):
-                    st.json(payload)
-
-    with tab4:
-        st.subheader("Full Pipeline Output")
-        st.json(result)
-
-    with tab5:
         render_physician_review_tab(
             result, patient, chief_complaint, use_memory,
             specialty=st.session_state.pipeline_params.get("specialty"),
             specialty_extra_fields=st.session_state.pipeline_params.get("specialty_extra_fields"),
         )
+
+    # Technical Details (Advanced) - collapsed by default
+    with st.expander("🔧 Technical Details (Advanced)", expanded=False):
+        tech_tab1, tech_tab2 = st.tabs(["🧠 Memory & Tools", "📄 Raw JSON"])
+
+        with tech_tab1:
+            st.subheader("Long-Term Memory")
+            mem_meta = meta.get("memory", {})
+            if use_memory:
+                st.write(f"**Patient ID:** {mem_meta.get('patient_id')}")
+                st.write(
+                    f"**Approved visits on record:** {mem_meta.get('prior_visits', 0)} "
+                    "(the only visits read as this patient's history)"
+                )
+                st.write(
+                    "**History used in this note:** "
+                    + ("Yes" if mem_meta.get("memory_context_used") else "No")
+                )
+                st.write(
+                    "**This run recorded:** "
+                    + (
+                        f"draft `{mem_meta.get('visit_id')}` (unsigned - not history "
+                        f"until a physician approves it)"
+                        if mem_meta.get("saved")
+                        else "nothing"
+                    )
+                )
+                st.write(
+                    f"**Drafts / approved on file:** "
+                    f"{mem_meta.get('draft_visit_count', 0)} / "
+                    f"{mem_meta.get('approved_visit_count', 0)}"
+                )
+                if mem_meta.get("memory_context"):
+                    with st.expander("History text supplied to the agents"):
+                        st.text(mem_meta["memory_context"])
+            else:
+                st.info("Memory was disabled for this run; nothing was read or written.")
+
+            st.divider()
+            st.subheader("Supervisor (routing / retries)")
+            sup_meta = meta.get("supervisor", {})
+            st.write(f"**Retries:** {sup_meta.get('retry_count', 0)}")
+            st.write(
+                "**Status:** "
+                + (
+                    "Escalated for human review" if sup_meta.get("needs_human_review")
+                    else "Completed"
+                )
+            )
+            if sup_meta.get("applied"):
+                st.write("**Auto-applied fixes:**")
+                for fix in sup_meta["applied"]:
+                    st.caption(f"• {fix}")
+            if sup_meta.get("feedback"):
+                with st.expander("Feedback passed to retry passes"):
+                    for item in sup_meta["feedback"]:
+                        st.markdown(f"- {item}")
+
+            st.divider()
+            st.subheader("Tools Used This Visit")
+            tool_meta = meta.get("tools", {})
+            st.caption(
+                "The orchestrator grants each agent only the tools it needs; "
+                "the Scribe never sees the coding validation tool."
+            )
+            st.write("**Tools called:** " + (
+                ", ".join(f"`{t}`" for t in tool_meta.get("tools_used", []))
+                or "None"
+            ))
+            for node, trace in (tool_meta.get("tool_results") or {}).items():
+                if not trace:
+                    continue
+                st.markdown(f"**`{node}`**")
+                for tool_name, payload in trace.items():
+                    with st.expander(tool_name, expanded=False):
+                        st.json(payload)
+
+        with tech_tab2:
+            st.subheader("Full Pipeline Output")
+            st.json(result)
