@@ -21,21 +21,47 @@ CONDITION_ICD10_MAP = {
     "hypertension": ["I10"],
     "essential hypertension": ["I10"],
     "htn": ["I10"],
+    "hyperlipidemia": ["E78.5", "E78"],
+    "hld": ["E78.5", "E78"],
+    "dyslipidemia": ["E78.5", "E78"],
+    "ckd": ["N18.9", "N18"],
+    "chronic kidney disease": ["N18.9", "N18"],
+    "chronic kidney": ["N18.9", "N18"],
     "asthma": ["J45.909", "J45"],
     "seasonal allergies": ["J30.9"],
     "allergic rhinitis": ["J30.9"],
     "angina": ["I20"],
     "chest pain": ["R07.9", "R07"],
+    "hypothyroidism": ["E03.9", "E03"],
+    "heart failure": ["I50.9", "I50"],
+    "hfpef": ["I50.9", "I50"],
+    "hfref": ["I50.9", "I50"],
+    "atrial fibrillation": ["I48.91", "I48"],
+    "afib": ["I48.91", "I48"],
+    "depression": ["F32.9", "F33.9", "F32", "F33"],
+    "major depressive disorder": ["F32.9", "F33.9", "F32", "F33"],
+    "copd": ["J44.9", "J44"],
+    "chronic obstructive pulmonary disease": ["J44.9", "J44"],
+    "migraine": ["G43.909", "G43"],
 }
 
 # ICD-10 codes that indicate specific conditions we can check for
 ICD10_CONDITION_MAP = {
     "E11": "Type 2 Diabetes",
     "I10": "Essential Hypertension",
+    "E78": "Hyperlipidemia/Dyslipidemia",
+    "N18": "Chronic Kidney Disease",
     "J45": "Asthma",
     "J30": "Allergic Rhinitis/Seasonal Allergies",
     "I20": "Angina/Ischemic Heart Disease",
     "R07": "Chest Pain",
+    "E03": "Hypothyroidism",
+    "I50": "Heart Failure",
+    "I48": "Atrial Fibrillation",
+    "F32": "Depression",
+    "F33": "Depression",
+    "J44": "COPD",
+    "G43": "Migraine",
 }
 
 # Hallucinated terms to watch for (when not in patient context)
@@ -61,7 +87,15 @@ def extract_conditions_from_context(patient_context: str) -> List[str]:
     # Look for conditions in the context
     condition_keywords = [
         "type 2 diabetes", "diabetes", "hypertension", "htn", 
-        "asthma", "seasonal allergies", "allergic rhinitis"
+        "hyperlipidemia", "hld", "dyslipidemia",
+        "ckd", "chronic kidney disease", "chronic kidney",
+        "asthma", "seasonal allergies", "allergic rhinitis",
+        "hypothyroidism",
+        "heart failure", "hfpef", "hfref",
+        "atrial fibrillation", "afib",
+        "depression", "major depressive disorder",
+        "copd", "chronic obstructive pulmonary disease",
+        "migraine",
     ]
     
     for cond in condition_keywords:

@@ -282,6 +282,9 @@ def _state_to_result(state: AgentState, mode: str, model_name: Optional[str]) ->
             # exactly which encounter data produced this note.
             "visit_context": dict(state.get("visit_context") or {}),
             "specialty": state.get("specialty"),
+            # Coding path metadata (Fast Path / Slow Path)
+            "coding_path": state.get("coding_path", "slow"),
+            "coding_path_decision": state.get("coding_path_decision", {}),
             "tools": {
                 "tools_used": sorted(
                     {name for trace in tool_results.values() if isinstance(trace, dict)

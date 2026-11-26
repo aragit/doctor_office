@@ -43,6 +43,17 @@ def load_patients():
         return json.load(f)
 
 
+@st.cache_data
+def load_internist_patients():
+    """Load the 10 synthetic Internist patients for demo/testing."""
+    path = Path(__file__).parent.parent / "data" / "synthetic" / "internist_patients.json"
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return None
+
+
 @st.cache_resource
 def get_vectorstore():
     """Load vector store with Streamlit resource caching."""
@@ -1032,6 +1043,64 @@ with st.sidebar:
         st.write(f"**Allergies:** {', '.join(patient['allergies']) or 'None'}")
         st.write(f"**Last Visit:** {patient['last_visit_summary']}")
 
+    # --- Synthetic Internist Patients (Demo) ---
+    st.divider()
+    st.subheader("Load Synthetic Patient (Demo)")
+    internist_patients = load_internist_patients()
+    if internist_patients is None:
+        st.warning("Internist patient data not found. Run from project root.")
+    else:
+        # Filter options
+        filter_option = st.selectbox(
+            "Filter by expected path",
+            ["All", "Fast Path", "Slow Path"],
+            key="internist_filter",
+        )
+        if filter_option == "Fast Path":
+            filtered = [p for p in internist_patients if p["expected_path"] == "fast"]
+        elif filter_option == "Slow Path":
+            filtered = [p for p in internist_patients if p["expected_path"] == "slow"]
+        else:
+            filtered = internist_patients
+
+        patient_options = [
+            f"{p['patient_id']} | {p['patient_name']} | {p['expected_path'].upper()}"
+            for p in filtered
+        ]
+        selected_internist_idx = st.selectbox(
+            "Select synthetic patient",
+            range(len(filtered)),
+            format_func=lambda i: patient_options[i],
+            key="internist_select",
+        )
+        selected_internist = filtered[selected_internist_idx]
+
+        # Show demo notes
+        st.caption(f"📋 {selected_internist['demo_notes']}")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Load Patient", type="primary", use_container_width=True, key="load_internist"):
+                # Store in session state for form pre-filling
+                st.session_state.loaded_chief_complaint = selected_internist["chief_complaint"]
+                st.session_state.loaded_patient_context = selected_internist["patient_context"]
+                st.session_state.loaded_visit_context = selected_internist["visit_context"]
+                st.session_state.loaded_patient_id = selected_internist["patient_id"]
+                st.session_state.loaded_patient_name = selected_internist["patient_name"]
+                st.session_state.loaded_specialty = selected_internist.get("specialty", "general_internal_medicine")
+                st.success(f"Loaded {selected_internist['patient_name']} ({selected_internist['patient_id']})")
+                st.rerun()
+        with col2:
+            if st.button("Clear", use_container_width=True, key="clear_internist"):
+                for key in [
+                    "loaded_chief_complaint", "loaded_patient_context", "loaded_visit_context",
+                    "loaded_patient_id", "loaded_patient_name", "loaded_specialty",
+                    "vc_hpi", "vc_bp", "vc_hr", "vc_temp", "vc_rr", "vc_spo2",
+                    "vc_weight", "vc_bmi", "vc_exam", "vc_findings", "vc_vitals_note"
+                ]:
+                    st.session_state.pop(key, None)
+                st.rerun()
+
     st.divider()
     st.subheader("Long-Term Memory")
     use_memory = st.toggle(
@@ -1096,9 +1165,12 @@ with st.sidebar:
         st.caption("⏱️ Estimated time: ~6–10 minutes total")
 
 st.header("Chief Complaint")
+# Use loaded value if available, otherwise empty
+default_chief_complaint = st.session_state.get("loaded_chief_complaint", "")
 chief_complaint = st.text_area(
     "Enter the patient's chief complaint / reason for visit:",
     height=100,
+    value=default_chief_complaint,
     placeholder="e.g., Follow-up for diabetes and hypertension. Reports increased fatigue and occasional dizziness."
 )
 
@@ -1106,6 +1178,33 @@ chief_complaint = st.text_area(
 selected_specialty, specialty_extra_fields = render_specialty_selector()
 
 st.divider()
+
+# Pre-fill visit context from loaded synthetic patient
+loaded_vc = st.session_state.get("loaded_visit_context")
+if loaded_vc:
+    # Set widget keys before rendering so Streamlit uses them as defaults
+    if "hpi" in loaded_vc:
+        st.session_state.vc_hpi = loaded_vc["hpi"]
+    if "blood_pressure" in loaded_vc:
+        st.session_state.vc_bp = loaded_vc["blood_pressure"]
+    if "heart_rate" in loaded_vc:
+        st.session_state.vc_hr = str(loaded_vc["heart_rate"])
+    if "temperature" in loaded_vc:
+        st.session_state.vc_temp = str(loaded_vc["temperature"])
+    if "respiratory_rate" in loaded_vc:
+        st.session_state.vc_rr = str(loaded_vc["respiratory_rate"])
+    if "spo2" in loaded_vc:
+        st.session_state.vc_spo2 = str(loaded_vc["spo2"])
+    if "weight_kg" in loaded_vc:
+        st.session_state.vc_weight = str(loaded_vc["weight_kg"])
+    if "bmi" in loaded_vc:
+        st.session_state.vc_bmi = str(loaded_vc["bmi"])
+    if "physical_exam" in loaded_vc:
+        st.session_state.vc_exam = loaded_vc["physical_exam"]
+    if "additional_findings" in loaded_vc:
+        st.session_state.vc_findings = loaded_vc["additional_findings"]
+    if "vitals_note" in loaded_vc:
+        st.session_state.vc_vitals_note = loaded_vc["vitals_note"]
 
 visit_context = render_visit_context_inputs(specialty_extra_fields)
 
@@ -1141,6 +1240,44 @@ if st.button("🚀 Run Pipeline", type="primary", use_container_width=True):
     if not chief_complaint.strip():
         st.error("Please enter a chief complaint.")
     else:
+        # Use loaded synthetic patient context if available, otherwise build from sidebar patient
+        loaded_context = st.session_state.get("loaded_patient_context")
+        loaded_pid = st.session_state.get("loaded_patient_id")
+        loaded_name = st.session_state.get("loaded_patient_name")
+        
+        if loaded_context and loaded_pid:
+            patient_context = loaded_context
+            patient_id = loaded_pid
+            # Create a complete patient dict for display purposes
+            # Parse patient_context to extract age, gender, conditions, medications, allergies
+            # The patient_context format is:
+            # Patient: John Doe, 58-year-old male
+            # Conditions: Type 2 Diabetes Mellitus, Essential Hypertension
+            # Medications: Metformin 500mg BID, Lisinopril 10mg daily, Atorvastatin 20mg nightly
+            # Allergies: Penicillin (rash)
+            # Last Visit: ...
+            import re
+            ctx = loaded_context
+            age_match = re.search(r'(\d+)-year-old', ctx)
+            gender_match = re.search(r'-year-old (\w+)', ctx)
+            conditions_match = re.search(r'Conditions: ([^\n]+)', ctx)
+            medications_match = re.search(r'Medications: ([^\n]+)', ctx)
+            allergies_match = re.search(r'Allergies: ([^\n]+)', ctx)
+            
+            display_patient = {
+                "name": loaded_name or "Synthetic Patient",
+                "patient_id": loaded_pid,
+                "age": int(age_match.group(1)) if age_match else 0,
+                "gender": gender_match.group(1).capitalize() if gender_match else "Unknown",
+                "conditions": [c.strip() for c in conditions_match.group(1).split(',')] if conditions_match else [],
+                "medications": [m.strip() for m in medications_match.group(1).split(',')] if medications_match else [],
+                "allergies": [a.strip() for a in allergies_match.group(1).split(',')] if allergies_match else [],
+            }
+        else:
+            patient_context = build_patient_context(patient)
+            patient_id = patient["patient_id"]
+            display_patient = patient
+
         # Store params and trigger pipeline run
         st.session_state.review_status = None
         st.session_state.review_feedback = ""
@@ -1150,16 +1287,18 @@ if st.button("🚀 Run Pipeline", type="primary", use_container_width=True):
         st.session_state.review_persisted = None
         st.session_state.review_error = None
         st.session_state.pipeline_params = {
-            "patient_context": build_patient_context(patient),
+            "patient_context": patient_context,
             "chief_complaint": chief_complaint,
             "visit_context": visit_context,
             "mode": selected_mode,
-            "patient_id": patient["patient_id"],
+            "patient_id": patient_id,
             "use_memory": use_memory,
             "physician_feedback": None,
             "specialty": selected_specialty,
             "specialty_extra_fields": specialty_extra_fields,
         }
+        # Store display patient for review tab
+        st.session_state.display_patient = display_patient
         st.session_state.should_run_pipeline = True
         st.rerun()
 
@@ -1367,8 +1506,10 @@ if st.session_state.pipeline_result:
                 st.write(cpt_grounding.get("justification", ""))
 
     with tab3:
+        # Use display_patient from session state (set when pipeline ran) for synthetic patients
+        display_patient = st.session_state.get("display_patient", patient)
         render_physician_review_tab(
-            result, patient, chief_complaint, use_memory,
+            result, display_patient, chief_complaint, use_memory,
             specialty=st.session_state.pipeline_params.get("specialty"),
             specialty_extra_fields=st.session_state.pipeline_params.get("specialty_extra_fields"),
         )
@@ -1426,9 +1567,9 @@ if st.session_state.pipeline_result:
                 for fix in sup_meta["applied"]:
                     st.caption(f"• {fix}")
             if sup_meta.get("feedback"):
-                with st.expander("Feedback passed to retry passes"):
-                    for item in sup_meta["feedback"]:
-                        st.markdown(f"- {item}")
+                st.markdown("**Feedback passed to retry passes:**")
+                for item in sup_meta["feedback"]:
+                    st.markdown(f"- {item}")
 
             st.divider()
             st.subheader("Tools Used This Visit")

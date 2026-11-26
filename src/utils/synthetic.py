@@ -12,6 +12,11 @@ _SYNTHETIC_DATA = (
     / "data" / "synthetic" / "patients.json"
 )
 
+_INTERNIST_DATA = (
+    Path(__file__).resolve().parent.parent.parent
+    / "data" / "synthetic" / "internist_patients.json"
+)
+
 
 class SyntheticGuardError(RuntimeError):
     """Raised when a record lacks a verifiable synthetic marker and ALLOW_REAL_PHI is false."""
@@ -19,11 +24,15 @@ class SyntheticGuardError(RuntimeError):
 
 @lru_cache(maxsize=1)
 def _synthetic_index() -> frozenset:
-    if not _SYNTHETIC_DATA.exists():
-        return frozenset()
-    with open(_SYNTHETIC_DATA, encoding="utf-8") as f:
-        data = json.load(f)
-    return frozenset(str(p["patient_id"]) for p in data if p.get("is_synthetic") is True)
+    ids = set()
+    for path in (_SYNTHETIC_DATA, _INTERNIST_DATA):
+        if path.exists():
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            for p in data:
+                if p.get("is_synthetic") is True:
+                    ids.add(str(p["patient_id"]))
+    return frozenset(ids)
 
 
 def is_known_synthetic_patient(patient_id: Optional[str]) -> bool:
