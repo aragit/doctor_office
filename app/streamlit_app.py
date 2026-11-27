@@ -203,8 +203,30 @@ CLINICAL_CSS = """
 .streamlit-expanderContent .stAlert { background: var(--card) !important; border: 1px solid var(--border) !important; border-radius: var(--radius-sm) !important; color: var(--text) !important; }
 .streamlit-expanderContent .stAlert * { color: var(--text) !important; }
 
+/* Approve preview expander - target by header text content */
+.stExpander .streamlit-expanderContent { background: var(--bg) !important; color: var(--text) !important; }
+.stExpander .streamlit-expanderContent * { color: var(--text) !important; }
+.stExpander .streamlit-expanderContent .stMarkdown { color: var(--text) !important; }
+.stExpander .streamlit-expanderContent .stMarkdown p { color: var(--text) !important; }
+.stExpander .streamlit-expanderContent .stMarkdown li { color: var(--text) !important; }
+.stExpander .streamlit-expanderContent .stMarkdown strong { color: var(--text) !important; }
+.stExpander .streamlit-expanderContent .stMarkdown code { background: var(--card) !important; color: var(--text) !important; padding: 0.1rem 0.3rem !important; border-radius: var(--radius-sm) !important; }
+.stExpander .streamlit-expanderContent .stMarkdown ul { color: var(--text) !important; }
+.stExpander .streamlit-expanderContent .stMarkdown ul li { color: var(--text) !important; }
+
 /* Patient card ID badge - ensure readable */
 .patient-card__id { background: var(--bg) !important; color: var(--text-muted) !important; }
+
+/* Approve preview content wrapper */
+.approve-preview-content { background: var(--bg) !important; color: var(--text) !important; padding: 0.5rem 0 !important; }
+.approve-preview-content * { color: var(--text) !important; }
+.approve-preview-content .stMarkdown { color: var(--text) !important; }
+.approve-preview-content .stMarkdown p { color: var(--text) !important; }
+.approve-preview-content .stMarkdown li { color: var(--text) !important; }
+.approve-preview-content .stMarkdown strong { color: var(--text) !important; }
+.approve-preview-content .stMarkdown code { background: var(--card) !important; color: var(--text) !important; padding: 0.1rem 0.3rem !important; border-radius: var(--radius-sm) !important; }
+.approve-preview-content .stMarkdown ul { color: var(--text) !important; }
+.approve-preview-content .stMarkdown ul li { color: var(--text) !important; }
 
 /* Ensure all markdown in expanders is readable */
 .stExpander .stMarkdown, .stExpander .stMarkdown p, .stExpander .stMarkdown li, .stExpander .stMarkdown strong { color: var(--text) !important; }
@@ -862,9 +884,11 @@ if st.session_state.pipeline_result:
                 memory_enabled=bool(use_memory), draft_recorded=draft_recorded,
             )
             with st.expander("📋 What Approve will do", expanded=True):
+                st.markdown('<div class="approve-preview-content">', unsafe_allow_html=True)
                 st.markdown(f"**{preview.summary}**")
                 if preview.warning: st.warning(preview.warning)
                 for line in preview.detail_lines: st.markdown(f"- {line}")
+                st.markdown('</div>', unsafe_allow_html=True)
         
         # Decision buttons
         st.markdown('<div class="decision-bar">', unsafe_allow_html=True)
