@@ -561,6 +561,18 @@ def _run_fast_path(
     elif "straightforward" in cpt_suggestion.lower():
         mdm_level = "straightforward"
 
+    # Deterministic CPT grounding (same structure as Slow Path)
+    cpt = _deterministic_cpt(soap_note, patient_context)
+    coding_result["cpt_grounding"] = {
+        "deterministic": True,
+        "cpt_code": cpt["cpt_code"],
+        "overall_mdm_level": cpt["overall_mdm_level"],
+        "justification": cpt["justification"],
+        "domains": cpt["domains"],
+    }
+    # Ensure cpt_suggestions uses the deterministic result
+    coding_result["cpt_suggestions"] = [cpt["cpt_description"]]
+
     elapsed = round(time.time() - started, 1)
     logger.info(
         "coding_node (fast path) completed in %ss (%d code(s) kept, %d dropped, %d tool flag(s), CPT %s)",

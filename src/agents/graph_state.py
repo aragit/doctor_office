@@ -262,6 +262,10 @@ class AgentState(TypedDict, total=False):
     total_seconds: float
     started_at: float
 
+    # --- Fast Path / Slow Path metadata -------------------------------------
+    coding_path: str
+    coding_path_decision: Dict[str, Any]
+
 
 def build_initial_state(
     patient_context: str,
@@ -339,6 +343,8 @@ def build_initial_state(
         started_at=time.time() if started_at is None else started_at,
         is_synthetic=is_synthetic,
         allow_real_phi=allow_real_phi,
+        coding_path="",
+        coding_path_decision={},
     )
 
 
