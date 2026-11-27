@@ -98,6 +98,9 @@ CLINICAL_CSS = """
   color: white !important;
 }
 
+/* All action buttons in decision bar must have white text */
+.decision-bar .stButton > button { color: white !important; }
+
 /* ─── Top Bar ─── */
 .top-bar {
   display: flex !important;
@@ -186,8 +189,15 @@ CLINICAL_CSS = """
 .stTabs [aria-selected="true"] { color: var(--primary) !important; border-bottom: 2px solid var(--primary) !important; background: var(--card) !important; }
 
 /* Expanders */
-.streamlit-expanderHeader { background: var(--card) !important; border: 1px solid var(--border) !important; border-radius: var(--radius) !important; font-weight: 500 !important; }
-.streamlit-expanderContent { border: 1px solid var(--border) !important; border-top: none !important; border-radius: 0 0 var(--radius) var(--radius) !important; background: var(--bg) !important; }
+.streamlit-expanderHeader { background: var(--card) !important; border: 1px solid var(--border) !important; border-radius: var(--radius) !important; font-weight: 500 !important; color: var(--text) !important; }
+.streamlit-expanderContent { border: 1px solid var(--border) !important; border-top: none !important; border-radius: 0 0 var(--radius) var(--radius) !important; background: var(--bg) !important; color: var(--text) !important; }
+.streamlit-expanderContent * { color: var(--text) !important; }
+
+/* Alerts (st.warning, st.info, st.error, st.success) in expanders and main content */
+.stAlert { background: var(--card) !important; border: 1px solid var(--border) !important; border-radius: var(--radius-sm) !important; color: var(--text) !important; }
+.stAlert * { color: var(--text) !important; }
+.stAlert[data-baseweb="notification"] { background: var(--card) !important; }
+.stAlert[data-baseweb="notification"] > div { color: var(--text) !important; }
 
 /* Button styling */
 .stButton > button { border-radius: var(--radius-sm) !important; font-weight: 500 !important; transition: all 0.15s ease !important; }
@@ -348,39 +358,39 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Patient Context (only after loading a demo patient)
-    loaded_pid = st.session_state.get("loaded_patient_id")
-    loaded_name = st.session_state.get("loaded_patient_name")
-    loaded_context = st.session_state.get("loaded_patient_context")
+    # Patient Context (only after loading a demo patient) - uses structured data
+    loaded_patient_data = st.session_state.get("loaded_patient_data")
     
-    if loaded_pid and loaded_context:
+    if loaded_patient_data:
         st.header("Patient Context")
-        # Parse patient info from loaded context
-        import re
-        ctx = loaded_context
-        name = loaded_name or "Unknown"
-        age_match = re.search(r'(\d+)yo', ctx)
-        gender_match = re.search(r'yo\s+(\w+)', ctx)
-        conditions_match = re.search(r'Conditions:\s*([^\n]+)', ctx)
-        medications_match = re.search(r'Medications:\s*([^\n]+)', ctx)
-        allergies_match = re.search(r'Allergies:\s*([^\n]+)', ctx)
+        name = loaded_patient_data.get("name", "Unknown")
+        patient_id = loaded_patient_data.get("patient_id", "—")
+        age = loaded_patient_data.get("age", "?")
+        gender = loaded_patient_data.get("gender", "?")
+        conditions = loaded_patient_data.get("conditions", [])
+        medications = loaded_patient_data.get("medications", [])
+        allergies = loaded_patient_data.get("allergies", [])
         
-        st.write(f"**{name}**  \n{age_match.group(1) if age_match else '?'}yo {gender_match.group(1).capitalize() if gender_match else '?'}  \nID: `{loaded_pid}`")
+        st.markdown(f"**{name}**  \n{age}yo {gender.capitalize() if isinstance(gender, str) else '?'}  \nID: `{patient_id}`")
         
-        if conditions_match:
-            conditions = [c.strip() for c in conditions_match.group(1).split(',')]
+        if conditions:
+            st.markdown("**Conditions**")
             for c in conditions:
                 st.markdown(f'<span class="pill pill--condition">{c}</span>', unsafe_allow_html=True)
+        else:
+            st.markdown('<span class="pill pill--empty">No conditions</span>', unsafe_allow_html=True)
         
-        if medications_match:
-            meds = [m.strip() for m in medications_match.group(1).split(',')]
-            for m in meds[:3]:
+        if medications:
+            st.markdown("**Medications**")
+            for m in medications[:3]:
                 st.markdown(f'<span class="pill pill--medication">{m}</span>', unsafe_allow_html=True)
-            if len(meds) > 3:
-                st.caption(f"+{len(meds) - 3} more")
+            if len(medications) > 3:
+                st.caption(f"+{len(medications) - 3} more")
+        else:
+            st.markdown('<span class="pill pill--empty">No medications</span>', unsafe_allow_html=True)
         
-        if allergies_match and allergies_match.group(1).strip().lower() not in ('none', 'n/a', 'nkda'):
-            allergies = [a.strip() for a in allergies_match.group(1).split(',')]
+        if allergies:
+            st.markdown("**Allergies**")
             for a in allergies:
                 st.markdown(f'<span class="pill pill--allergy">{a}</span>', unsafe_allow_html=True)
         else:
@@ -390,7 +400,8 @@ with st.sidebar:
     
     # Long-term memory (for the currently selected/loaded patient)
     # Use loaded patient if available, otherwise fall back to first patient
-    memory_patient_id = loaded_pid if loaded_pid else patients[0]["patient_id"]
+    loaded_patient_data = st.session_state.get("loaded_patient_data")
+    memory_patient_id = loaded_patient_data.get("patient_id") if loaded_patient_data else patients[0]["patient_id"]
     st.header("Long-Term Memory")
     hist = load_patient_history(memory_patient_id)
     st.write(f"**Approved visits:** {hist['approved_visit_count']}")
@@ -587,6 +598,18 @@ if st.session_state.pipeline_result:
     else:
         # Fallback to session display_patient or first patient
         display_patient = st.session_state.get("display_patient", patients[0] if patients else {"name": "Unknown", "patient_id": "UNK"})
+    
+    # Ensure display_patient has all required fields for rendering
+    if not display_patient.get("conditions"):
+        display_patient.setdefault("conditions", [])
+    if not display_patient.get("medications"):
+        display_patient.setdefault("medications", [])
+    if not display_patient.get("allergies"):
+        display_patient.setdefault("allergies", [])
+    if not display_patient.get("age"):
+        display_patient.setdefault("age", "?")
+    if not display_patient.get("gender"):
+        display_patient.setdefault("gender", "?")
     
     params = st.session_state.pipeline_params or {}
     visit_context_used = meta.get("visit_context") or params.get("visit_context") or {}
