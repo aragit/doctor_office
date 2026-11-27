@@ -299,14 +299,8 @@ def load_internist_patients():
 patients = load_patients()
 
 with st.sidebar:
-    st.header("Patient")
-    patient_names = [f"{p['name']} ({p['patient_id']})" for p in patients]
-    selected_idx = st.selectbox("Select Patient", range(len(patients)), format_func=lambda i: patient_names[i], label_visibility="collapsed")
-    patient = patients[selected_idx]
-
-    # Load Demo Patient (moved up)
-    st.markdown("---")
-    st.subheader("Load Demo Patient")
+    # Load Demo Patient (at top)
+    st.header("Load Demo Patient")
     internist_patients = load_internist_patients()
     if internist_patients:
         filter_option = st.selectbox("Filter", ["All", "Fast Path", "Slow Path"], key="internist_filter")
@@ -331,6 +325,16 @@ with st.sidebar:
                 st.session_state.loaded_patient_id = selected_internist["patient_id"]
                 st.session_state.loaded_patient_name = selected_internist["patient_name"]
                 st.session_state.loaded_specialty = selected_internist.get("specialty", "general_internal_medicine")
+                # Store structured patient data for display
+                st.session_state.loaded_patient_data = {
+                    "name": selected_internist["patient_name"],
+                    "patient_id": selected_internist["patient_id"],
+                    "conditions": selected_internist.get("conditions", []),
+                    "medications": selected_internist.get("medications", []),
+                    "allergies": selected_internist.get("allergies", []),
+                    "age": selected_internist.get("age"),
+                    "gender": selected_internist.get("gender"),
+                }
                 st.success(f"Loaded {selected_internist['patient_name']}")
                 st.rerun()
         with col2:
@@ -344,37 +348,51 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Patient Context (single clean card)
-    st.subheader("Patient Context")
-    st.write(f"**{patient['name']}**  \n{patient['age']}yo {patient['gender']}  \nID: `{patient['patient_id']}`")
+    # Patient Context (only after loading a demo patient)
+    loaded_pid = st.session_state.get("loaded_patient_id")
+    loaded_name = st.session_state.get("loaded_patient_name")
+    loaded_context = st.session_state.get("loaded_patient_context")
     
-    conditions = patient.get("conditions", [])
-    if conditions:
-        st.markdown("**Conditions**")
-        for c in conditions:
-            st.markdown(f'<span class="pill pill--condition">{c}</span>', unsafe_allow_html=True)
+    if loaded_pid and loaded_context:
+        st.header("Patient Context")
+        # Parse patient info from loaded context
+        import re
+        ctx = loaded_context
+        name = loaded_name or "Unknown"
+        age_match = re.search(r'(\d+)yo', ctx)
+        gender_match = re.search(r'yo\s+(\w+)', ctx)
+        conditions_match = re.search(r'Conditions:\s*([^\n]+)', ctx)
+        medications_match = re.search(r'Medications:\s*([^\n]+)', ctx)
+        allergies_match = re.search(r'Allergies:\s*([^\n]+)', ctx)
+        
+        st.write(f"**{name}**  \n{age_match.group(1) if age_match else '?'}yo {gender_match.group(1).capitalize() if gender_match else '?'}  \nID: `{loaded_pid}`")
+        
+        if conditions_match:
+            conditions = [c.strip() for c in conditions_match.group(1).split(',')]
+            for c in conditions:
+                st.markdown(f'<span class="pill pill--condition">{c}</span>', unsafe_allow_html=True)
+        
+        if medications_match:
+            meds = [m.strip() for m in medications_match.group(1).split(',')]
+            for m in meds[:3]:
+                st.markdown(f'<span class="pill pill--medication">{m}</span>', unsafe_allow_html=True)
+            if len(meds) > 3:
+                st.caption(f"+{len(meds) - 3} more")
+        
+        if allergies_match and allergies_match.group(1).strip().lower() not in ('none', 'n/a', 'nkda'):
+            allergies = [a.strip() for a in allergies_match.group(1).split(',')]
+            for a in allergies:
+                st.markdown(f'<span class="pill pill--allergy">{a}</span>', unsafe_allow_html=True)
+        else:
+            st.markdown('<span class="pill pill--empty">NKDA</span>', unsafe_allow_html=True)
+        
+        st.markdown("---")
     
-    meds = patient.get("medications", [])
-    if meds:
-        st.markdown("**Medications**")
-        for m in meds[:3]:
-            st.markdown(f'<span class="pill pill--medication">{m}</span>', unsafe_allow_html=True)
-        if len(meds) > 3:
-            st.caption(f"+{len(meds) - 3} more")
-    
-    allergies = patient.get("allergies", [])
-    if allergies:
-        st.markdown("**Allergies**")
-        for a in allergies:
-            st.markdown(f'<span class="pill pill--allergy">{a}</span>', unsafe_allow_html=True)
-    else:
-        st.markdown('<span class="pill pill--empty">NKDA</span>', unsafe_allow_html=True)
-
-    st.markdown("---")
-    
-    # Long-term memory
-    st.subheader("Long-Term Memory")
-    hist = load_patient_history(patient["patient_id"])
+    # Long-term memory (for the currently selected/loaded patient)
+    # Use loaded patient if available, otherwise fall back to first patient
+    memory_patient_id = loaded_pid if loaded_pid else patients[0]["patient_id"]
+    st.header("Long-Term Memory")
+    hist = load_patient_history(memory_patient_id)
     st.write(f"**Approved visits:** {hist['approved_visit_count']}")
     st.write(f"**Drafts on file:** {hist['draft_visit_count']}")
     for v in hist["visits"]:
@@ -383,7 +401,7 @@ with st.sidebar:
     st.markdown("---")
     
     # Run settings
-    st.subheader("Run Settings")
+    st.header("Run Settings")
     selected_mode = st.selectbox("Mode", ["fast"], index=0, key="mode_select", help="Model mode")
     use_memory = st.checkbox("Use Long-Term Memory", value=True, key="use_memory")
 
@@ -485,15 +503,16 @@ with col_run:
             loaded_context = st.session_state.get("loaded_patient_context")
             loaded_pid = st.session_state.get("loaded_patient_id")
             loaded_name = st.session_state.get("loaded_patient_name")
+            loaded_patient_data = st.session_state.get("loaded_patient_data")
             
             if loaded_context and loaded_pid:
                 patient_context = loaded_context
                 patient_id = loaded_pid
-                display_patient = {"name": loaded_name or "Synthetic Patient", "patient_id": loaded_pid}
+                display_patient = loaded_patient_data or {"name": loaded_name or "Synthetic Patient", "patient_id": loaded_pid}
             else:
-                patient_context = build_patient_context(patient)
-                patient_id = patient["patient_id"]
-                display_patient = patient
+                patient_context = build_patient_context(patients[0])
+                patient_id = patients[0]["patient_id"]
+                display_patient = patients[0]
             
             st.session_state.review_status = None
             st.session_state.review_feedback = ""
@@ -526,7 +545,15 @@ def run_pipeline(patient_context: str, chief_complaint: str, retrieved_notes: st
     )
 
 if st.session_state.should_run_pipeline:
-    # Loading state - show spinner while pipeline runs
+    # Loading state - show full-screen loading in main content area
+    st.markdown("""
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4rem 2rem;text-align:center;">
+        <div style="font-size:3rem;margin-bottom:1rem;">⏳</div>
+        <div style="font-size:1.25rem;font-weight:600;color:var(--text);margin-bottom:0.5rem;">Running clinical pipeline…</div>
+        <div style="font-size:0.9rem;color:var(--text-muted);">Memory Load → Scribe → Cleanup → Coding → Validation → Supervisor → Memory Save</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
     with st.spinner("Running clinical pipeline…"):
         st.session_state.should_run_pipeline = False
         params = st.session_state.pipeline_params
@@ -552,7 +579,15 @@ if st.session_state.pipeline_result:
     coding = result["coding_result"]
     meta = result.get("metadata", {})
     total_time = st.session_state.get("pipeline_total_time", None)
-    display_patient = st.session_state.get("display_patient", patient)
+    
+    # Get display patient (from loaded demo patient with full data, or fallback)
+    loaded_patient_data = st.session_state.get("loaded_patient_data")
+    if loaded_patient_data:
+        display_patient = loaded_patient_data
+    else:
+        # Fallback to session display_patient or first patient
+        display_patient = st.session_state.get("display_patient", patients[0] if patients else {"name": "Unknown", "patient_id": "UNK"})
+    
     params = st.session_state.pipeline_params or {}
     visit_context_used = meta.get("visit_context") or params.get("visit_context") or {}
     use_memory = params.get("use_memory", True)
