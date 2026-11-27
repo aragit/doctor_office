@@ -309,6 +309,54 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# ─── Helper: parse_patient_context ───
+def parse_patient_context(patient_context: str, patient_name: str, patient_id: str) -> dict:
+    """Parse the multi-line patient_context string into structured data."""
+    import re
+    
+    result = {
+        "name": patient_name,
+        "patient_id": patient_id,
+        "age": "?",
+        "gender": "?",
+        "conditions": [],
+        "medications": [],
+        "allergies": [],
+    }
+    
+    # Parse "Patient: Robert Chen, 52-year-old male"
+    patient_match = re.search(r'Patient:\s*([^,\n]+),\s*(\d+)-year-old\s+(\w+)', patient_context)
+    if patient_match:
+        result["name"] = patient_match.group(1).strip()
+        result["age"] = patient_match.group(2)
+        result["gender"] = patient_match.group(3).lower()
+    elif patient_name:
+        result["name"] = patient_name
+    
+    # Parse "Conditions: Type 2 Diabetes Mellitus on insulin, Hypertension, Obesity"
+    conditions_match = re.search(r'Conditions:\s*([^\n]+)', patient_context)
+    if conditions_match:
+        conditions_text = conditions_match.group(1).strip()
+        if conditions_text.lower() not in ("none", "n/a", ""):
+            result["conditions"] = [c.strip() for c in conditions_text.split(",")]
+    
+    # Parse "Medications: Insulin glargine 30 units nightly, Insulin lispro..."
+    medications_match = re.search(r'Medications:\s*([^\n]+)', patient_context)
+    if medications_match:
+        medications_text = medications_match.group(1).strip()
+        if medications_text.lower() not in ("none", "n/a", ""):
+            result["medications"] = [m.strip() for m in medications_text.split(",")]
+    
+    # Parse "Allergies: None" or "Allergies: Penicillin (rash)"
+    allergies_match = re.search(r'Allergies:\s*([^\n]+)', patient_context)
+    if allergies_match:
+        allergies_text = allergies_match.group(1).strip()
+        if allergies_text.lower() not in ("none", "n/a", "nkda", ""):
+            result["allergies"] = [a.strip() for a in allergies_text.split(",")]
+    
+    return result
+
+
 # ─── Sidebar ───
 @st.cache_data
 def load_patients():
@@ -354,22 +402,19 @@ with st.sidebar:
                 st.session_state.loaded_patient_id = selected_internist["patient_id"]
                 st.session_state.loaded_patient_name = selected_internist["patient_name"]
                 st.session_state.loaded_specialty = selected_internist.get("specialty", "general_internal_medicine")
-                # Store structured patient data for display
-                st.session_state.loaded_patient_data = {
-                    "name": selected_internist["patient_name"],
-                    "patient_id": selected_internist["patient_id"],
-                    "conditions": selected_internist.get("conditions", []),
-                    "medications": selected_internist.get("medications", []),
-                    "allergies": selected_internist.get("allergies", []),
-                    "age": selected_internist.get("age"),
-                    "gender": selected_internist.get("gender"),
-                }
+                # Parse patient_context string into structured data
+                st.session_state.loaded_patient_data = parse_patient_context(
+                    selected_internist["patient_context"],
+                    selected_internist["patient_name"],
+                    selected_internist["patient_id"],
+                )
                 st.success(f"Loaded {selected_internist['patient_name']}")
                 st.rerun()
         with col2:
             if st.button("Clear", use_container_width=True, key="clear_internist"):
                 for key in ["loaded_chief_complaint", "loaded_patient_context", "loaded_visit_context",
                            "loaded_patient_id", "loaded_patient_name", "loaded_specialty",
+                           "loaded_patient_data",
                            "vc_hpi", "vc_bp", "vc_hr", "vc_temp", "vc_rr", "vc_spo2",
                            "vc_weight", "vc_bmi", "vc_exam", "vc_findings", "vc_vitals_note"]:
                     st.session_state.pop(key, None)
