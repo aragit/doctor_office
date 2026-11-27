@@ -192,6 +192,25 @@ CLINICAL_CSS = """
 .streamlit-expanderHeader { background: var(--card) !important; border: 1px solid var(--border) !important; border-radius: var(--radius) !important; font-weight: 500 !important; color: var(--text) !important; }
 .streamlit-expanderContent { border: 1px solid var(--border) !important; border-top: none !important; border-radius: 0 0 var(--radius) var(--radius) !important; background: var(--bg) !important; color: var(--text) !important; }
 .streamlit-expanderContent * { color: var(--text) !important; }
+.streamlit-expanderContent .stMarkdown { color: var(--text) !important; }
+.streamlit-expanderContent .stMarkdown p { color: var(--text) !important; }
+.streamlit-expanderContent .stMarkdown li { color: var(--text) !important; }
+.streamlit-expanderContent .stMarkdown strong { color: var(--text) !important; }
+.streamlit-expanderContent .stMarkdown em { color: var(--text) !important; }
+
+/* Approval preview expander specific fixes */
+.streamlit-expanderContent [data-testid="stExpanderDetails"] { background: var(--bg) !important; color: var(--text) !important; }
+.streamlit-expanderContent .stAlert { background: var(--card) !important; border: 1px solid var(--border) !important; border-radius: var(--radius-sm) !important; color: var(--text) !important; }
+.streamlit-expanderContent .stAlert * { color: var(--text) !important; }
+
+/* Patient card ID badge - ensure readable */
+.patient-card__id { background: var(--bg) !important; color: var(--text-muted) !important; }
+
+/* Ensure all markdown in expanders is readable */
+.stExpander .stMarkdown, .stExpander .stMarkdown p, .stExpander .stMarkdown li, .stExpander .stMarkdown strong { color: var(--text) !important; }
+
+/* Run Pipeline button - ensure white text */
+.stButton > button[kind="primary"] { color: white !important; }
 
 /* Alerts (st.warning, st.info, st.error, st.success) in expanders and main content */
 .stAlert { background: var(--card) !important; border: 1px solid var(--border) !important; border-radius: var(--radius-sm) !important; color: var(--text) !important; }
@@ -594,7 +613,15 @@ if st.session_state.pipeline_result:
     # Get display patient (from loaded demo patient with full data, or fallback)
     loaded_patient_data = st.session_state.get("loaded_patient_data")
     if loaded_patient_data:
-        display_patient = loaded_patient_data
+        display_patient = {
+            "name": loaded_patient_data.get("name", "Unknown"),
+            "patient_id": loaded_patient_data.get("patient_id", "UNK"),
+            "conditions": loaded_patient_data.get("conditions", []),
+            "medications": loaded_patient_data.get("medications", []),
+            "allergies": loaded_patient_data.get("allergies", []),
+            "age": loaded_patient_data.get("age") or "?",
+            "gender": loaded_patient_data.get("gender") or "?",
+        }
     else:
         # Fallback to session display_patient or first patient
         display_patient = st.session_state.get("display_patient", patients[0] if patients else {"name": "Unknown", "patient_id": "UNK"})
