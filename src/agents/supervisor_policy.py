@@ -59,6 +59,10 @@ __all__ = [
 # Maximum number of LLM re-passes before escalating to human review.
 MAX_RETRIES = 2
 
+# Maximum retries in fast/demo mode - strictly capped at 1 to prevent
+# multi-minute retry stacks on CPU for borderline cases.
+MAX_RETRIES_FAST = 1
+
 # Maximum number of empty-SOAP retries before escalating to human review.
 MAX_EMPTY_SOAP_RETRIES = 1
 
@@ -315,6 +319,7 @@ def determine_route(
     coding_result: Optional[Dict[str, Any]],
     chief_complaint: str = "",
     max_retries: int = MAX_RETRIES,
+    mode: str = "fast",
     empty_soap_retries: int = 0,
     *,
     pending_revalidation: bool = False,
@@ -353,6 +358,9 @@ def determine_route(
     coding_result = dict(coding_result or {})
     revalidated = int(revalidation_passes or 0)
     budget_spent = revalidated >= int(max_revalidations)
+
+    # Use fast-mode retry cap when in fast mode
+    effective_max_retries = MAX_RETRIES_FAST if mode == "fast" else max_retries
 
     # 0. A mutated coding_result has never been validated in its current form.
     #    Re-check first, whatever the flags say: they describe the result the fix
@@ -464,13 +472,13 @@ def determine_route(
         )
 
     # 4. Retries exhausted -> escalate to a human.
-    if int(retry_count or 0) >= max_retries:
+    if int(retry_count or 0) >= effective_max_retries:
         remaining = scribe_flags + coding_flags + extra_coding_feedback
         return SupervisorDecision(
             class_="human_review",
             route_to=ROUTE_HUMAN_REVIEW,
             feedback=[
-                f"Max retries reached ({max_retries}); routing to human review. "
+                f"Max retries reached ({effective_max_retries}); routing to human review. "
                 f"Remaining issues: "
                 + ("; ".join(remaining) or "see quality flags"),
             ],
@@ -518,6 +526,7 @@ class VisitSupervisorPolicy:
         coding_result: Optional[Dict[str, Any]],
         chief_complaint: str = "",
         max_retries: int = MAX_RETRIES,
+        mode: str = "fast",
         *,
         pending_revalidation: bool = False,
         revalidation_passes: int = 0,
@@ -531,6 +540,7 @@ class VisitSupervisorPolicy:
             coding_result,
             chief_complaint,
             max_retries,
+            mode,
             empty_soap_retries=empty_soap_retries,
             pending_revalidation=pending_revalidation,
             revalidation_passes=revalidation_passes,

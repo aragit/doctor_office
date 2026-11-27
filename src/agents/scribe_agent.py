@@ -83,6 +83,40 @@ SYSTEM_PROMPT = """You are an expert medical scribe. Output ONLY valid JSON with
 
 NEVER put drug/test/referral/symptom/duration/exam finding in note that appears nowhere in supplied context."""
 
+# Fast-mode system prompt: trimmed of redundant boilerplate while preserving
+# all critical clinical rules, patient context, vitals/labs/findings,
+# allergy/medication constraints, and required SOAP JSON keys.
+FAST_SYSTEM_PROMPT = """You are an expert medical scribe. Output ONLY valid JSON with keys: subjective, objective, assessment, plan, icd10_suggestions. No extra text.
+
+SECTION RULES:
+- SUBJECTIVE = patient-reported only (complaint, HPI). NEVER exam/vitals/labs. Never empty — synthesize from Last Visit Summary if routine follow-up.
+- OBJECTIVE = measured/tested only (vitals, exam, labs, imaging). NEVER patient history. NEVER invent.
+- ASSESSMENT = 2-4 sentences: leading problem + findings; relation to known conditions; WHY. No circular reasoning.
+- PLAN = numbered steps (1. 2. 3.), one action per assessment finding. Order: acute first, then chronic. Monitoring/labs → med adjustments → lifestyle/education → follow-up interval → referrals. NEVER "continue meds and follow up" — specify monitoring, escalation criteria, follow-up interval.
+
+DATA DISCIPLINE:
+- Short honest note beats complete invented one. Only assert what data supports. Missing? Say so. Never assume duration/severity/laterality/count not in chart.
+- NEW/ACUTE symptom in CC/HPI → PRIMARY problem. Assessment/Plan address it FIRST. Chronic = secondary/brief.
+
+CLINICAL GUARDRAILS:
+- HbA1c ≥6.5%=DM, 5.7–6.4%=prediabetes, <5.7%=normal. NEVER call elevated HbA1c hypoglycemia.
+- Glucose: fasting ≥126 or random ≥200 with symptoms = DM. Distinguish from hypoglycemia (<70).
+- NEVER invent causal links. NEVER convert value types (HbA1c≠glucose, HR≠BP).
+- Report values as given — never call "normal"/"WNL" unless documented.
+
+GROUNDING & SAFETY (INVIOLABLE):
+- Base ONLY on supplied context. No hallucination. Use ONLY conditions/meds/allergies from Patient Context.
+- NO NEW CHRONIC CONDITIONS. NO UNSUPPORTED CARDIAC DX when no cardiac dx in context.
+- Name symptoms as symptoms; list risk factors without concluding cardiac dx. Correlate with documented ECG.
+- NEVER order test/scan already done. If no vitals/exam/tests → "Not documented today".
+
+ICD-10 (max 5): "CODE - Description" format. ONLY for conditions in Patient Context. Table is lookup, NOT suggestion.
+  Type 2 Diabetes → E11.9 | HTN → I10 | Allergic Rhinitis → J30.9 | Asthma → J45.909
+- NEVER I20.x/I21.x unless Patient Context lists cardiac dx. ECG/chest pain do NOT authorize cardiac dx.
+- Lead with leading problem code, then chronic. Always return icd10_suggestions (even empty).
+
+NEVER put drug/test/referral/symptom/duration/exam finding not in supplied context."""
+
 # The visit-data block is inserted between the chart and the retrieved notes so
 # the most authoritative, most specific data is closest to the instruction.
 HUMAN_TEMPLATE = """Patient Context:
@@ -190,10 +224,15 @@ def _num_predict(mode: str) -> int:
 
 
 def create_scribe_chain(mode: str = "fast", model_name: Optional[str] = None):
-    """Create the Scribe Agent chain with JSON parser."""
+    """Create the Scribe Agent chain with JSON parser.
+    
+    Uses trimmed FAST_SYSTEM_PROMPT in fast mode for faster generation,
+    full SYSTEM_PROMPT in quality mode.
+    """
     parser = JsonOutputParser(pydantic_object=SOAPNote)
+    system_prompt = FAST_SYSTEM_PROMPT if mode == "fast" else SYSTEM_PROMPT
     prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_PROMPT),
+        ("system", system_prompt),
         ("human", HUMAN_TEMPLATE),
     ])
     # Fast mode: limit tokens to prevent hanging
@@ -207,7 +246,28 @@ def create_scribe_chain(mode: str = "fast", model_name: Optional[str] = None):
 
 
 def _repair_json_output(raw_output: str, mode: str = "fast", model_name: Optional[str] = None) -> Optional[SOAPNote]:
-    """Attempt to repair malformed JSON output using a repair prompt."""
+    """Attempt to repair malformed JSON output using a repair prompt.
+    
+    First attempts deterministic JSON extraction with schema validation.
+    Only invokes LLM repair when deterministic parsing fails AND required
+    core fields are actually missing or invalid.
+    """
+    # Try deterministic extraction first
+    from utils.llm_payload import extract_json_object, build_model
+    
+    payload = extract_json_object(coerce_str(raw_output))
+    if payload is not None:
+        # Validate against schema
+        try:
+            note = build_model(SOAPNote, payload, source="deterministic repair")
+            if has_content(note):
+                logger.info("Deterministic JSON repair succeeded (no LLM call)")
+                return note
+        except Exception as exc:
+            logger.debug(f"Deterministic schema validation failed: {exc}")
+    
+    # Only invoke LLM repair if deterministic parsing failed
+    logger.info("Invoking LLM JSON repair (deterministic extraction failed)")
     repair_prompt = f"""Fix this malformed JSON to match the SOAPNote schema exactly.
 Return ONLY corrected JSON.
 
@@ -235,8 +295,9 @@ Required: subjective, objective, assessment, plan, icd10_suggestions (list of "C
 
 def _create_raw_chain(mode: str = "fast", model_name: Optional[str] = None):
     """Create a chain with string output parser for repair."""
+    system_prompt = FAST_SYSTEM_PROMPT if mode == "fast" else SYSTEM_PROMPT
     prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_PROMPT),
+        ("system", system_prompt),
         ("human", HUMAN_TEMPLATE),
     ])
     num_predict = _num_predict(mode)

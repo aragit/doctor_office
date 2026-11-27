@@ -139,7 +139,28 @@ Existing ICD-10 from Scribe: {existing_icd10}
 
 
 def _repair_json_output(raw_output: str, mode: str = "fast", model_name: Optional[str] = None) -> Optional[CodingResult]:
-    """Attempt to repair malformed JSON output using a repair prompt."""
+    """Attempt to repair malformed JSON output using a repair prompt.
+    
+    First attempts deterministic JSON extraction with schema validation.
+    Only invokes LLM repair when deterministic parsing fails AND required
+    core fields are actually missing or invalid.
+    """
+    # Try deterministic extraction first
+    from utils.llm_payload import extract_json_object, build_model
+    
+    payload = extract_json_object(coerce_str(raw_output))
+    if payload is not None:
+        # Validate against schema
+        try:
+            note = build_model(CodingResult, payload, source="deterministic repair")
+            if has_content(note):
+                logger.info("Deterministic JSON repair succeeded (no LLM call)")
+                return note
+        except Exception as exc:
+            logger.debug(f"Deterministic schema validation failed: {exc}")
+    
+    # Only invoke LLM repair if deterministic parsing failed
+    logger.info("Invoking LLM JSON repair (deterministic extraction failed)")
     repair_prompt = f"""Fix this malformed JSON to match the CodingResult schema exactly.
 Return ONLY corrected JSON.
 

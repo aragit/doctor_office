@@ -123,6 +123,7 @@ def supervisor_node(state: AgentState) -> dict:
         int(state.get("retry_count", 0) or 0),
         state.get("coding_result"),
         state.get("chief_complaint", ""),
+        mode=state.get("mode", "fast"),
         pending_revalidation=pending_revalidation,
         revalidation_passes=revalidation_passes,
         revalidation_stalls=revalidation_stalls,
