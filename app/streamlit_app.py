@@ -6,6 +6,7 @@
 
 # ─── Compatibility patch: suppress Streamlit/PyTorch & LangGraph startup noise ───
 import warnings
+import threading
 
 # Suppress LangChainPendingDeprecationWarning about allowed_objects
 try:
@@ -34,6 +35,7 @@ import json
 import logging
 import re
 import time
+from typing import List
 import streamlit as st
 
 # ─── Page config (MUST be first Streamlit command) ───
@@ -502,6 +504,84 @@ with st.sidebar:
     selected_mode = st.selectbox("Mode", ["fast"], index=0, key="mode_select", help="Model mode")
     use_memory = st.checkbox("Use Long-Term Memory", value=True, key="use_memory")
 
+    st.markdown("---")
+    
+    # Demo Batch Runner (Background)
+    with st.expander("🔬 Demo Batch Runner (Background)", expanded=False):
+        st.caption("Run multiple demo patients sequentially in background. UI stays responsive.")
+        
+        internist_patients_batch = load_internist_patients()
+        if internist_patients_batch:
+            batch_options = {p["patient_id"]: f"{p['patient_id']} | {p['patient_name']} | {p['expected_path'].upper()}" for p in internist_patients_batch}
+            default_batch = ["P001", "P002", "P007", "P005"]
+            selected_batch = st.multiselect(
+                "Select Patients",
+                options=list(batch_options.keys()),
+                default=default_batch,
+                format_func=lambda pid: batch_options[pid],
+                key="batch_patient_select"
+            )
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("▶️ Run Selected Batch", type="primary", use_container_width=True, key="run_batch", disabled=st.session_state.get("batch_running", False)):
+                    if selected_batch:
+                        st.session_state.batch_running = True
+                        st.session_state.batch_status = {
+                            "status": "running",
+                            "selected": selected_batch,
+                            "current_index": 0,
+                            "completed": [],
+                            "results": [],
+                            "start_time": time.time(),
+                            "error": None,
+                        }
+                        st.rerun()
+                    else:
+                        st.warning("Select at least one patient")
+            with col2:
+                if st.button("🔄 Refresh Status", use_container_width=True, key="refresh_batch"):
+                    st.rerun()
+            
+            # Display batch status
+            batch_status = st.session_state.get("batch_status")
+            if batch_status:
+                if batch_status["status"] == "running":
+                    current_idx = batch_status["current_index"]
+                    total = len(batch_status["selected"])
+                    if current_idx < total:
+                        current_pid = batch_status["selected"][current_idx]
+                        st.info(f"Running: {current_pid} ({current_idx + 1}/{total})")
+                    else:
+                        st.info("Finalizing results...")
+                    elapsed = time.time() - batch_status.get("start_time", time.time())
+                    st.caption(f"Elapsed: {elapsed:.0f}s")
+                
+                if batch_status["completed"]:
+                    st.success(f"✅ {len(batch_status['completed'])}/{len(batch_status['selected'])} completed")
+                    # Show results table
+                    for res in batch_status.get("results", []):
+                        pid = res.get("patient_id", "?")
+                        actual = res.get("actual_path", "?")
+                        expected = res.get("expected_path", "?")
+                        match = "✅" if res.get("path_matched") else "❌"
+                        total_t = res.get("total_seconds", 0)
+                        scribe_t = res.get("timing", {}).get("scribe_seconds", 0)
+                        flags = len(res.get("governance", {}).get("quality_flags", []))
+                        hr = "⚠️" if res.get("governance", {}).get("needs_human_review") else "—"
+                        primary = res.get("coding", {}).get("primary_icd10", "—")
+                        secondary = "; ".join(res.get("coding", {}).get("secondary_icd10", [])) or "—"
+                        cpt = res.get("coding", {}).get("cpt_suggestions", ["—"])[0]
+                        
+                        with st.container():
+                            st.markdown(f"""
+                            **{pid}** | Expected: `{expected}` | Actual: `{actual}` | {match} | {total_t:.1f}s | Scribe: {scribe_t:.1f}s | ICD: {primary} | Sec: {secondary} | CPT: {cpt} | Flags: {flags} | HR: {hr}
+                            """)
+                
+                if batch_status.get("error"):
+                    st.error(f"Batch error: {batch_status['error']}")
+                    st.session_state.batch_running = False
+
 # ─── Main Input Form ───
 default_chief_complaint = st.session_state.get("loaded_chief_complaint", "")
 chief_complaint = st.text_area(
@@ -641,6 +721,100 @@ def run_pipeline(patient_context: str, chief_complaint: str, retrieved_notes: st
         is_synthetic=is_known_synthetic_patient(patient_id),
     )
 
+
+# ─── Background Batch Worker ───
+def run_batch_worker(selected_patients: List[str], mode: str):
+    """Background thread worker to run batch sequentially."""
+    import threading
+    import sys
+    PROJECT_ROOT = Path(__file__).resolve().parent.parent
+    sys.path.insert(0, str(PROJECT_ROOT / "src"))
+    sys.path.insert(0, str(PROJECT_ROOT))
+    
+    from agents.orchestrator import run_visit_pipeline
+    from utils.config import is_known_synthetic_patient
+    
+    all_patients = load_internist_patients()
+    patients_dict = {p["patient_id"]: p for p in all_patients}
+    
+    status = st.session_state.batch_status
+    
+    for i, pid in enumerate(selected_patients):
+        status["current_index"] = i
+        patient = patients_dict.get(pid)
+        if not patient:
+            continue
+        
+        try:
+            result = run_visit_pipeline(
+                patient_context=patient["patient_context"],
+                chief_complaint=patient["chief_complaint"],
+                retrieved_notes="",
+                mode=mode,
+                patient_id=patient["patient_id"],
+                use_memory=True,
+                visit_context=patient["visit_context"],
+                specialty=patient.get("specialty", "general_internal_medicine"),
+                is_synthetic=True,
+            )
+            
+            metadata = result.get("metadata") or {}
+            timing = metadata.get("timing") or {}
+            supervisor = metadata.get("supervisor") or {}
+            control_flow = metadata.get("control_flow") or {}
+            coding = result.get("coding_result") or {}
+            soap = result.get("soap_note") or {}
+            
+            res = {
+                "patient_id": patient["patient_id"],
+                "patient_name": patient["patient_name"],
+                "expected_path": patient["expected_path"],
+                "actual_path": metadata.get("coding_path", "unknown"),
+                "path_matched": metadata.get("coding_path") == patient["expected_path"],
+                "total_seconds": round(time.time() - status.get("start_time", time.time()), 2),
+                "timing": {
+                    "memory_load_seconds": timing.get("memory_load_seconds"),
+                    "scribe_seconds": timing.get("scribe_seconds"),
+                    "cleanup_seconds": timing.get("cleanup_seconds"),
+                    "coding_seconds": timing.get("coding_seconds"),
+                    "validation_seconds": timing.get("validation_seconds"),
+                    "supervisor_seconds": timing.get("supervisor_seconds"),
+                    "memory_save_seconds": timing.get("memory_save_seconds"),
+                },
+                "coding": {
+                    "primary_icd10": coding.get("primary_icd10"),
+                    "secondary_icd10": coding.get("secondary_icd10", []),
+                    "cpt_suggestions": coding.get("cpt_suggestions", []),
+                    "has_cpt_grounding": bool(coding.get("cpt_grounding")),
+                    "cpt_grounding": coding.get("cpt_grounding"),
+                },
+                "governance": {
+                    "retry_count": supervisor.get("retry_count", 0),
+                    "empty_soap_retries": metadata.get("empty_soap_retries", 0),
+                    "needs_human_review": supervisor.get("needs_human_review", False),
+                    "final_decision": control_flow.get("final_decision"),
+                    "quality_flags": result.get("quality_flags", []),
+                },
+                "soap_preview": {
+                    "subjective": soap.get("subjective", "")[:300],
+                    "objective": soap.get("objective", "")[:300],
+                    "assessment": soap.get("assessment", "")[:300],
+                    "plan": soap.get("plan", "")[:300],
+                },
+            }
+            
+            status["completed"].append(pid)
+            status["results"].append(res)
+            
+        except Exception as e:
+            status["error"] = f"Patient {pid}: {e}"
+            status["status"] = "error"
+            return
+    
+    status["status"] = "completed"
+    status["current_index"] = len(selected_patients)
+
+
 if st.session_state.should_run_pipeline:
     # Loading state - show full-screen loading in main content area
     st.markdown("""
@@ -668,6 +842,31 @@ if st.session_state.should_run_pipeline:
         except Exception as e:
             st.error(f"Pipeline Error: {e}")
             st.exception(e)
+
+# ─── Background Batch Execution Trigger ───
+if st.session_state.get("batch_running") and st.session_state.get("batch_status", {}).get("status") == "running":
+    batch_status = st.session_state.batch_status
+    if batch_status.get("current_index", 0) < len(batch_status.get("selected", [])):
+        # Start background worker if not already running
+        if not st.session_state.get("batch_thread_started"):
+            import threading
+            thread = threading.Thread(
+                target=run_batch_worker,
+                args=(batch_status["selected"], st.session_state.get("mode_select", "fast")),
+                daemon=True,
+            )
+            thread.start()
+            st.session_state.batch_thread_started = True
+            st.session_state.batch_thread = thread
+        # Rerun to update UI
+        time.sleep(1)
+        st.rerun()
+    else:
+        # Batch completed
+        st.session_state.batch_running = False
+        st.session_state.batch_thread_started = False
+        st.session_state.batch_status["status"] = "completed"
+        st.rerun()
 
 # ─── Display Results ───
 if st.session_state.pipeline_result:
