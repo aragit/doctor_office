@@ -208,6 +208,15 @@ section[data-testid="stSidebar"] { background: var(--card) !important; border-ri
 }
 .stSelectbox > div > div { background: white !important; }
 
+/* Dropdown menu (popover) - fix contrast for selectbox options */
+[data-baseweb="popover"] {
+  background: white !important; border: 1px solid var(--border) !important; border-radius: var(--radius-sm) !important; box-shadow: var(--shadow-hover) !important;
+}
+[data-baseweb="popover"] * { color: var(--text) !important; }
+[data-baseweb="popover"] [role="option"] { background: white !important; color: var(--text) !important; padding: 0.5rem 1rem !important; }
+[data-baseweb="popover"] [role="option"]:hover, [data-baseweb="popover"] [aria-selected="true"] { background: var(--bg) !important; color: var(--primary) !important; }
+[data-baseweb="popover"] [role="option"]:focus { outline: none !important; box-shadow: inset 2px 0 0 var(--primary) !important; }
+
 /* Form labels */
 .stForm label, .stWidgetLabel { color: var(--text) !important; font-weight: 500 !important; }
 </style>
@@ -295,35 +304,8 @@ with st.sidebar:
     selected_idx = st.selectbox("Select Patient", range(len(patients)), format_func=lambda i: patient_names[i], label_visibility="collapsed")
     patient = patients[selected_idx]
 
+    # Load Demo Patient (moved up)
     st.markdown("---")
-    st.subheader("Patient Context")
-    st.write(f"**{patient['name']}**  \n{patient['age']}yo {patient['gender']}  \nID: `{patient['patient_id']}`")
-    
-    conditions = patient.get("conditions", [])
-    if conditions:
-        st.markdown("**Conditions**")
-        for c in conditions:
-            st.markdown(f'<span class="pill pill--condition">{c}</span>', unsafe_allow_html=True)
-    
-    meds = patient.get("medications", [])
-    if meds:
-        st.markdown("**Medications**")
-        for m in meds[:3]:
-            st.markdown(f'<span class="pill pill--medication">{m}</span>', unsafe_allow_html=True)
-        if len(meds) > 3:
-            st.caption(f"+{len(meds) - 3} more")
-    
-    allergies = patient.get("allergies", [])
-    if allergies:
-        st.markdown("**Allergies**")
-        for a in allergies:
-            st.markdown(f'<span class="pill pill--allergy">{a}</span>', unsafe_allow_html=True)
-    else:
-        st.markdown('<span class="pill pill--empty">NKDA</span>', unsafe_allow_html=True)
-
-    st.markdown("---")
-    
-    # Synthetic patient loader
     st.subheader("Load Demo Patient")
     internist_patients = load_internist_patients()
     if internist_patients:
@@ -360,6 +342,34 @@ with st.sidebar:
                     st.session_state.pop(key, None)
                 st.rerun()
     
+    st.markdown("---")
+    
+    # Patient Context (single clean card)
+    st.subheader("Patient Context")
+    st.write(f"**{patient['name']}**  \n{patient['age']}yo {patient['gender']}  \nID: `{patient['patient_id']}`")
+    
+    conditions = patient.get("conditions", [])
+    if conditions:
+        st.markdown("**Conditions**")
+        for c in conditions:
+            st.markdown(f'<span class="pill pill--condition">{c}</span>', unsafe_allow_html=True)
+    
+    meds = patient.get("medications", [])
+    if meds:
+        st.markdown("**Medications**")
+        for m in meds[:3]:
+            st.markdown(f'<span class="pill pill--medication">{m}</span>', unsafe_allow_html=True)
+        if len(meds) > 3:
+            st.caption(f"+{len(meds) - 3} more")
+    
+    allergies = patient.get("allergies", [])
+    if allergies:
+        st.markdown("**Allergies**")
+        for a in allergies:
+            st.markdown(f'<span class="pill pill--allergy">{a}</span>', unsafe_allow_html=True)
+    else:
+        st.markdown('<span class="pill pill--empty">NKDA</span>', unsafe_allow_html=True)
+
     st.markdown("---")
     
     # Long-term memory
@@ -516,22 +526,24 @@ def run_pipeline(patient_context: str, chief_complaint: str, retrieved_notes: st
     )
 
 if st.session_state.should_run_pipeline:
-    st.session_state.should_run_pipeline = False
-    params = st.session_state.pipeline_params
-    start_time = time.time()
-    try:
-        result = run_pipeline(
-            patient_context=params["patient_context"], chief_complaint=params["chief_complaint"],
-            retrieved_notes="", mode=params["mode"], patient_id=params["patient_id"],
-            use_memory=params["use_memory"], visit_context=params["visit_context"],
-        )
-        total_time = time.time() - start_time
-        st.session_state.pipeline_result = result
-        st.session_state.pipeline_total_time = total_time
-        st.rerun()
-    except Exception as e:
-        st.error(f"Pipeline Error: {e}")
-        st.exception(e)
+    # Loading state - show spinner while pipeline runs
+    with st.spinner("Running clinical pipeline…"):
+        st.session_state.should_run_pipeline = False
+        params = st.session_state.pipeline_params
+        start_time = time.time()
+        try:
+            result = run_pipeline(
+                patient_context=params["patient_context"], chief_complaint=params["chief_complaint"],
+                retrieved_notes="", mode=params["mode"], patient_id=params["patient_id"],
+                use_memory=params["use_memory"], visit_context=params["visit_context"],
+            )
+            total_time = time.time() - start_time
+            st.session_state.pipeline_result = result
+            st.session_state.pipeline_total_time = total_time
+            st.rerun()
+        except Exception as e:
+            st.error(f"Pipeline Error: {e}")
+            st.exception(e)
 
 # ─── Display Results ───
 if st.session_state.pipeline_result:
