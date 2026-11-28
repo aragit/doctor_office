@@ -21,7 +21,7 @@ from langchain_core.messages import AIMessage
 
 from agents.graph_state import AgentState
 from agents.visit_context import visit_context_to_grounding_text
-from utils.validation import run_full_validation, validate_post_fix_integrity
+from utils.validation import run_full_validation, validate_post_fix_integrity, validate_numeric_grounding
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +53,14 @@ def validation_node(state: AgentState) -> dict:
     )
 
     quality_flags = list(validation_result.get("quality_flags", []))
+
+    # Deterministic numeric & clinical-qualifier grounding check (non-blocking)
+    grounding_flags = validate_numeric_grounding(
+        soap_note=soap_note,
+        patient_context=state["patient_context"],
+        visit_context=state.get("visit_context"),
+    )
+    quality_flags.extend(grounding_flags)
 
     # Re-validate the Supervisor's own mutation. Only on this path: the ordinary
     # pass already had these codes checked structurally by the Coding node, so

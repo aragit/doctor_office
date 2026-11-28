@@ -180,10 +180,10 @@ def _is_tagged_section(section: str) -> bool:
     """True when a declared section is one this pipeline knows how to tag."""
     return section.lower() in PROMPT_SECTIONS
 
-# Fast mode runs a 1.5B model on CPU; cap the injected block so a long HPI
-# cannot slow the pipeline down. Matches the notes/facts caps used elsewhere.
+# Cap the injected block so a long HPI cannot dominate the prompt, but leave
+# enough room for a full encounter (vitals, exam, labs and HPI) to survive.
 # The budget covers data AND rules: rules are never truncated, the data is.
-MAX_BLOCK_CHARS = 500
+MAX_BLOCK_CHARS = 1600
 
 BLOCK_HEADER = "CLINICAL DATA PROVIDED BY THE CLINICIAN FOR THIS VISIT (authoritative):"
 BLOCK_RULES = (

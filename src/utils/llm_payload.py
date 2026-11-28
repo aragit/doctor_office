@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
 _SEQUENCE_ORIGINS = (list, set, tuple, frozenset)
+_SOAP_NARRATIVE_FIELDS = ("subjective", "objective", "assessment", "plan")
 
 
 def coerce_str(value: Any) -> str:
@@ -152,6 +153,15 @@ def has_content(model: BaseModel) -> bool:
     return False
 
 
+def has_soap_sections(model: BaseModel) -> bool:
+    """True when at least one core SOAP narrative field is non-empty."""
+    return any(
+        coerce_str(getattr(model, field, None)).strip()
+        for field in _SOAP_NARRATIVE_FIELDS
+        if field in type(model).model_fields
+    )
+
+
 def extract_json_object(text: str) -> Optional[Dict[str, Any]]:
     """Best-effort extraction of a JSON object from raw model text.
 
@@ -195,5 +205,6 @@ __all__ = [
     "extract_json_object",
     "format_code_entry",
     "has_content",
+    "has_soap_sections",
     "normalize_payload",
 ]

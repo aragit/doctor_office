@@ -527,7 +527,7 @@ def test_visit_context_module():
     check("block marks the data as authoritative", "authoritative" in block.lower())
     check("block instructs no invention", "not" in block.lower() and "invent" in block.lower())
     check("block stays within the size cap",
-          len(build_visit_context_block({**vc, "hpi": "x" * 20_000})) <= 1400,
+          len(build_visit_context_block({**vc, "hpi": "x" * 20_000})) <= 1600,
           len(build_visit_context_block({**vc, "hpi": "x" * 20_000})))
 
     provided = visit_context_text(vc)

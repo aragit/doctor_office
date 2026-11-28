@@ -56,3 +56,6 @@ models/*.gguf
 data/memory/
 data/chroma_db/
 !.env.example
+
+# Local technical documentation (not for commit)
+TECHNICAL_DOC.md

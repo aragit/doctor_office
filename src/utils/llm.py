@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Any, Optional
+from typing import Optional
 
 from langchain_openai import ChatOpenAI
 
@@ -12,6 +12,21 @@ from .config import (
 )
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_TIMEOUT_SECONDS = 300
+
+
+def _get_timeout_seconds() -> int:
+    """Resolve per-request timeout in seconds from env, with a safe CPU default."""
+    raw = os.getenv("LLM_TIMEOUT_SECONDS", "").strip()
+    if not raw:
+        return DEFAULT_TIMEOUT_SECONDS
+    try:
+        parsed = int(raw)
+        return parsed if parsed > 0 else DEFAULT_TIMEOUT_SECONDS
+    except ValueError:
+        logger.warning("Invalid LLM_TIMEOUT_SECONDS=%r; using %ds", raw, DEFAULT_TIMEOUT_SECONDS)
+        return DEFAULT_TIMEOUT_SECONDS
 
 
 def get_llm(
@@ -45,7 +60,14 @@ def get_llm(
     if num_predict is None:
         num_predict = get_max_tokens(mode)
 
-    logger.info("Using LLM model: %s (mode=%s, explicit_model=%s)", resolved_model, mode, model_name)
+    timeout_seconds = _get_timeout_seconds()
+    logger.info(
+        "Using LLM model: %s (mode=%s, explicit_model=%s, timeout=%ss)",
+        resolved_model,
+        mode,
+        model_name,
+        timeout_seconds,
+    )
 
     return ChatOpenAI(
         model=resolved_model,
@@ -53,7 +75,7 @@ def get_llm(
         max_tokens=num_predict,
         base_url=LLM_BASE_URL,
         api_key=LLM_API_KEY,
-        timeout=120,  # 2-minute timeout per request
+        timeout=timeout_seconds,
         max_retries=1,  # Fail fast, don't retry on timeout
     )
 

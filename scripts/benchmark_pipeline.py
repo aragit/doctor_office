@@ -32,6 +32,34 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 # ---------------------------------------------------------------------------
+# Helper: extract CPT code from coding_result (handles both Fast/Slow path)
+# ---------------------------------------------------------------------------
+def _extract_cpt_summary(coding_result: Dict[str, Any]) -> Optional[str]:
+    """Extract CPT code/description from coding_result dict.
+
+    Handles multiple possible keys:
+    - cpt_suggestions: list of "CODE - Description" (both paths)
+    - cpt_code: just the code number (Fast Path decision metadata)
+    - cpt_description: full "CODE - Description" (Fast Path decision metadata)
+    """
+    if not coding_result:
+        return None
+
+    # Slow Path / standard: cpt_suggestions is a list of "CODE - Description"
+    cpt_suggestions = coding_result.get("cpt_suggestions")
+    if cpt_suggestions and isinstance(cpt_suggestions, list) and len(cpt_suggestions) > 0:
+        return cpt_suggestions[0]
+
+    # Fast Path decision metadata may have these directly
+    if coding_result.get("cpt_description"):
+        return coding_result["cpt_description"]
+    if coding_result.get("cpt_code"):
+        return coding_result["cpt_code"]
+
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Make sure we can import from src/ when running from project root or scripts/
 # ---------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -172,8 +200,7 @@ def run_single_iteration(
         "coding_result_summary": {
             "primary_icd10": (result.get("coding_result") or {}).get("primary_icd10"),
             "secondary_count": len((result.get("coding_result") or {}).get("secondary_icd10") or []),
-            "cpt": (result.get("coding_result") or {}).get("cpt_code")
-            or (result.get("coding_result") or {}).get("cpt_description"),
+            "cpt": _extract_cpt_summary(result.get("coding_result") or {}),
         },
         "raw_result_keys": sorted(result.keys()),
     }

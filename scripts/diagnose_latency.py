@@ -76,7 +76,7 @@ def make_cleanup_stub():
         }
     return cleanup_stub
 
-
+# it2 test 
 def make_coding_stub():
     def coding_stub(state):
         return {
@@ -104,7 +104,7 @@ def make_memory_load_stub():
         }
     return memory_load_stub
 
-
+#main run 
 def run_diagnosis():
     """Run the pipeline with mocked LLM to diagnose soap_empty retry behavior."""
     
